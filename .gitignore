@@ -1,0 +1,16 @@
+node_modules/
+web/node_modules/
+web/dist/
+api/.venv/
+api/__pycache__/
+api/**/__pycache__/
+*.pyc
+.DS_Store
+.env
+.env.*
+data/xauusd/*.csv
+data/xauusd_free/
+download/
+.cache/
+*.log
+.qodo/
