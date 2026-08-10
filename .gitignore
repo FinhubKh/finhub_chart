@@ -10,6 +10,8 @@ api/**/__pycache__/
 .env.*
 data/xauusd/*.csv
 data/xauusd_free/
+data/xauusd_r2/
+.vercel/
 download/
 .cache/
 *.log

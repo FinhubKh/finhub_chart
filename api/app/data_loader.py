@@ -5,25 +5,14 @@ from pathlib import Path
 
 import pandas as pd
 
-from .config import DATA_DIR, FREE_DATA_DIR, TIMEFRAME_FILES, TIMEFRAMES
+from .config import DATA_DIR, TIMEFRAME_FILES, TIMEFRAMES
 
 
-def _normalize_source(source: str | None) -> str:
-    s = (source or "local").strip().lower()
-    if s not in ("local", "free"):
-        raise ValueError("source must be 'local' (FinHub) or 'free' (Dukascopy API)")
-    return s
-
-
-def _data_dir(source: str) -> Path:
-    return FREE_DATA_DIR if source == "free" else DATA_DIR
-
-
-def file_for_tf(tf: str, source: str = "local") -> Path:
+def file_for_tf(tf: str) -> Path:
     key = tf.upper()
     if key not in TIMEFRAME_FILES:
         raise ValueError(f"Unsupported timeframe: {tf}. Use one of {TIMEFRAMES}")
-    return _data_dir(source) / TIMEFRAME_FILES[key]
+    return DATA_DIR / TIMEFRAME_FILES[key]
 
 
 def _csv_edge_meta(path: Path) -> tuple[int, str | None, str | None]:
@@ -62,12 +51,11 @@ def _csv_edge_meta(path: Path) -> tuple[int, str | None, str | None]:
         return 0, None, None
 
 
-def timeframe_status(source: str = "local") -> list[dict]:
-    source = _normalize_source(source)
-    if source == "free":
-        from .free_data import free_timeframe_status
+def timeframe_status() -> list[dict]:
+    from .storage import finhub_uses_r2, r2_timeframe_status
 
-        return free_timeframe_status()
+    if finhub_uses_r2():
+        return r2_timeframe_status()
 
     items: list[dict] = []
     for tf, filename in TIMEFRAME_FILES.items():
@@ -111,19 +99,10 @@ def _load_csv_cached(path_str: str, mtime: float) -> pd.DataFrame:
     return df
 
 
-def _resolve_path(tf: str, source: str) -> Path:
-    source = _normalize_source(source)
-    if source == "free":
-        from .free_data import ensure_free_csv
+def _load_df(tf: str) -> pd.DataFrame:
+    from .storage import load_finhub_dataframe
 
-        return ensure_free_csv(tf)
-
-    path = file_for_tf(tf, "local")
-    if not path.exists():
-        raise FileNotFoundError(
-            f"Missing FinHub data for {tf}: {path}. Run `npm run data` first."
-        )
-    return path
+    return load_finhub_dataframe(tf).copy()
 
 
 def load_ohlc(
@@ -131,10 +110,8 @@ def load_ohlc(
     start: str | None = None,
     end: str | None = None,
     limit: int | None = None,
-    source: str = "local",
 ) -> pd.DataFrame:
-    path = _resolve_path(tf, source)
-    df = _load_csv_cached(str(path), path.stat().st_mtime).copy()
+    df = _load_df(tf)
     if start:
         df = df[df["datetime"] >= pd.to_datetime(start, utc=True)]
     if end:
@@ -149,12 +126,9 @@ def candles_payload(
     start: str | None = None,
     end: str | None = None,
     limit: int | None = None,
-    source: str = "local",
 ) -> dict:
     """Return OHLC candles. `total_available` is always the untruncated filtered length."""
-    source = _normalize_source(source)
-    path = _resolve_path(tf, source)
-    df = _load_csv_cached(str(path), path.stat().st_mtime).copy()
+    df = _load_df(tf)
     if start:
         df = df[df["datetime"] >= pd.to_datetime(start, utc=True)]
     if end:
@@ -170,7 +144,6 @@ def candles_payload(
             "count": 0,
             "candles": [],
             "total_available": 0,
-            "source": source,
         }
 
     times = (df["datetime"].astype("int64") // 1_000_000_000).to_numpy()
@@ -196,5 +169,4 @@ def candles_payload(
         "count": len(candles),
         "candles": candles,
         "total_available": total_available,
-        "source": source,
     }

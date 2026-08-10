@@ -3,7 +3,7 @@ import ChartPane from "./components/ChartPane";
 import IndicatorPanel from "./components/IndicatorPanel";
 import ReplayBar, { ReplayPeriodPop } from "./components/ReplayBar";
 import Toolbar from "./components/Toolbar";
-import { fetchCandles, fetchTimeframes, type Candle, type DataSource, type TimeframeFile } from "./api";
+import { fetchCandles, fetchTimeframes, type Candle, type TimeframeFile } from "./api";
 import type { Drawing, ToolId } from "./lib/drawings";
 import type { IndicatorId } from "./lib/indicators";
 import {
@@ -21,17 +21,6 @@ import {
 } from "./lib/time";
 
 const TFS = ["1M", "5M", "15M", "1H", "4H", "1D", "1W", "1MN"];
-const DATA_SOURCE_KEY = "finhubkh.dataSource";
-
-function loadDataSource(): DataSource {
-  try {
-    const v = localStorage.getItem(DATA_SOURCE_KEY);
-    if (v === "free" || v === "local") return v;
-  } catch {
-    /* ignore */
-  }
-  return "local";
-}
 
 /** First paint: recent window only. More history hydrates in the background. */
 const INITIAL_BARS = 4_000;
@@ -43,7 +32,6 @@ const REPLAY_TICK_MS = 400;
 
 export default function App() {
   const [tf, setTf] = useState("1H");
-  const [dataSource, setDataSource] = useState<DataSource>(() => loadDataSource());
   const [files, setFiles] = useState<TimeframeFile[]>([]);
   const [candles, setCandles] = useState<Candle[]>([]);
   const [loading, setLoading] = useState(false);
@@ -76,16 +64,8 @@ export default function App() {
   const [speed, setSpeed] = useState(1);
 
   useEffect(() => {
-    try {
-      localStorage.setItem(DATA_SOURCE_KEY, dataSource);
-    } catch {
-      /* ignore */
-    }
-  }, [dataSource]);
-
-  useEffect(() => {
     let cancelled = false;
-    fetchTimeframes(dataSource)
+    fetchTimeframes()
       .then((res) => {
         if (!cancelled) setFiles(res.files);
       })
@@ -95,7 +75,7 @@ export default function App() {
     return () => {
       cancelled = true;
     };
-  }, [dataSource]);
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -107,7 +87,7 @@ export default function App() {
     setPlaying(false);
     setReplayPopOpen(false);
 
-    fetchCandles(tf, INITIAL_BARS, dataSource)
+    fetchCandles(tf, INITIAL_BARS)
       .then((res) => {
         if (cancelled) return;
         setCandles(res.candles);
@@ -118,7 +98,7 @@ export default function App() {
         if (target <= res.count) return;
 
         setHydrating(true);
-        return fetchCandles(tf, target, dataSource).then((full) => {
+        return fetchCandles(tf, target).then((full) => {
           if (cancelled) return;
           setCandles(full.candles);
         });
@@ -139,7 +119,7 @@ export default function App() {
     return () => {
       cancelled = true;
     };
-  }, [tf, dataSource]);
+  }, [tf]);
 
   const dataMin = candles[0] ? unixToLocalInput(candles[0].time) : "";
   const dataMax = candles.length
@@ -240,13 +220,11 @@ export default function App() {
 
   const chartBusy = loading || hydrating;
   const chartBusyMsg = loading
-    ? dataSource === "free"
-      ? `Fetching free API ${tf}…`
-      : `Loading ${tf}…`
+    ? `Loading ${tf}…`
     : `Loading more ${tf} history…`;
 
   const barLabel = chartBusy
-    ? `${dataSource === "free" ? "Free API" : "FinHub"} · ${tf}`
+    ? `FinHub · ${tf}`
     : replayOn
       ? `Replay · ${visibleCandles.length.toLocaleString()} / ${candles.length.toLocaleString()}`
       : `${candles.length.toLocaleString()} bars · ${tf}`;
@@ -261,50 +239,21 @@ export default function App() {
       <header className="topbar">
         <div className="brand">
           <strong>FINHUBKH</strong>
-          <span>
-            XAUUSD · {dataSource === "free" ? "Free API (Dukascopy)" : "FinHub local"}
-          </span>
+          <span>XAUUSD · FinHub</span>
         </div>
 
         <div className="topbar-center">
-          <div className="source-toggle" role="group" aria-label="Data source">
-            <button
-              type="button"
-              className={`source-btn ${dataSource === "local" ? "active" : ""}`}
-              onClick={() => setDataSource("local")}
-              title="Load FinHub curated CSVs from data/xauusd"
-            >
-              FinHub
-            </button>
-            <button
-              type="button"
-              className={`source-btn ${dataSource === "free" ? "active" : ""}`}
-              onClick={() => setDataSource("free")}
-              title="Fetch from free Dukascopy API (cached on disk)"
-            >
-              Free API
-            </button>
-          </div>
           <div className="tf-row">
             {TFS.map((item) => {
               const meta = fileMap[item];
-              const missing =
-                dataSource === "local" ? (meta ? !meta.exists : false) : false;
+              const missing = meta ? !meta.exists : false;
               return (
                 <button
                   key={item}
                   className={`tf-btn ${tf === item ? "active" : ""}`}
                   disabled={missing}
                   onClick={() => setTf(item)}
-                  title={
-                    missing
-                      ? "CSV missing — run npm run data"
-                      : dataSource === "free"
-                        ? meta?.cached
-                          ? `${meta.filename} (cached)`
-                          : `${item} via Dukascopy (will download on first open)`
-                        : meta?.filename
-                  }
+                  title={missing ? "Data missing on FinHub/R2" : meta?.filename}
                 >
                   {item}
                 </button>
@@ -407,9 +356,6 @@ export default function App() {
               <div className="chart-loading-pop">
                 <span className="chart-loading-spinner" aria-hidden />
                 <p>{chartBusyMsg}</p>
-                {dataSource === "free" && loading && (
-                  <em>First load may take a minute while Dukascopy downloads…</em>
-                )}
               </div>
             </div>
           )}

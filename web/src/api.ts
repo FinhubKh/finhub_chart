@@ -1,5 +1,3 @@
-export type DataSource = "local" | "free";
-
 export type Candle = {
   time: number;
   open: number;
@@ -59,8 +57,15 @@ export type BacktestResult = {
   }>;
 };
 
+const API_BASE = (import.meta.env.VITE_API_URL as string | undefined)?.replace(/\/$/, "") || "";
+
+function apiUrl(path: string) {
+  if (!API_BASE) return path;
+  return `${API_BASE}${path.startsWith("/") ? path : `/${path}`}`;
+}
+
 async function json<T>(url: string, init?: RequestInit): Promise<T> {
-  const res = await fetch(url, init);
+  const res = await fetch(apiUrl(url), init);
   if (!res.ok) {
     const detail = await res.json().catch(() => ({}));
     throw new Error(detail.detail || res.statusText);
@@ -68,30 +73,26 @@ async function json<T>(url: string, init?: RequestInit): Promise<T> {
   return res.json();
 }
 
-export function fetchTimeframes(source: DataSource = "local") {
-  const q = new URLSearchParams({ source });
+export function fetchTimeframes() {
   return json<{
     timeframes: string[];
     files: TimeframeFile[];
-    sources?: string[];
-    source?: string;
-  }>(`/api/timeframes?${q}`);
+  }>("/api/timeframes");
 }
 
 export function fetchStrategies() {
   return json<{ strategies: StrategyInfo[] }>("/api/strategies");
 }
 
-/** Load candles. Pass `limit` for a fast recent window. `source`: local FinHub or free Dukascopy. */
-export function fetchCandles(tf: string, limit?: number, source: DataSource = "local") {
-  const q = new URLSearchParams({ tf, source });
+/** Load candles. Pass `limit` for a fast recent window. */
+export function fetchCandles(tf: string, limit?: number) {
+  const q = new URLSearchParams({ tf });
   if (limit != null) q.set("limit", String(limit));
   return json<{
     tf: string;
     count: number;
     candles: Candle[];
     total_available?: number;
-    source?: string;
   }>(`/api/candles?${q}`);
 }
 

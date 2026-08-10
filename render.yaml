@@ -1,0 +1,26 @@
+services:
+  - type: web
+    name: finhub-chart-api
+    runtime: docker
+    plan: free
+    region: singapore
+    dockerfilePath: ./api/Dockerfile
+    dockerContext: .
+    healthCheckPath: /api/health
+    envVars:
+      - key: FINHUB_DATA_SOURCE
+        value: r2
+      - key: R2_ACCOUNT_ID
+        sync: false
+      - key: R2_ACCESS_KEY_ID
+        sync: false
+      - key: R2_SECRET_ACCESS_KEY
+        sync: false
+      - key: R2_BUCKET
+        sync: false
+      - key: R2_PREFIX
+        value: xauusd
+      - key: R2_ENDPOINT
+        sync: false
+      - key: CORS_ORIGINS
+        sync: false

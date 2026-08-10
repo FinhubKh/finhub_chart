@@ -7,6 +7,7 @@
     "download:xauusd": "node scripts/download_xauusd.mjs",
     "resample:weekly": "python3 scripts/resample_weekly.py",
     "data": "npm run download:xauusd && npm run resample:weekly",
+    "upload:r2": "python3 scripts/upload_r2.py",
     "dev:api": "cd api && python3 -m uvicorn app.main:app --reload --port 8000",
     "dev:web": "cd web && npm run dev",
     "dev": "npm run dev:api",

@@ -110,38 +110,6 @@ select {
   min-width: 0;
 }
 
-.source-toggle {
-  display: inline-flex;
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  overflow: hidden;
-  flex-shrink: 0;
-}
-
-.source-btn {
-  border: none;
-  background: transparent;
-  color: var(--muted);
-  padding: 0.35rem 0.65rem;
-  cursor: pointer;
-  font-size: 0.75rem;
-  font-weight: 600;
-}
-
-.source-btn + .source-btn {
-  border-left: 1px solid var(--border);
-}
-
-.source-btn:hover {
-  color: var(--text);
-  background: rgba(255, 255, 255, 0.04);
-}
-
-.source-btn.active {
-  color: #fff;
-  background: rgba(41, 98, 255, 0.28);
-}
-
 .tf-row {
   display: flex;
   flex-wrap: wrap;
