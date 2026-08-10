@@ -84,16 +84,43 @@ export function fetchStrategies() {
   return json<{ strategies: StrategyInfo[] }>("/api/strategies");
 }
 
-/** Load candles. Pass `limit` for a fast recent window. */
-export function fetchCandles(tf: string, limit?: number) {
+/** Load candles. Pass `limit` for a fast recent window, or start/end for a period. */
+export function fetchCandles(
+  tf: string,
+  opts?: {
+    limit?: number;
+    start?: string;
+    end?: string;
+    lookback?: number;
+  }
+) {
   const q = new URLSearchParams({ tf });
-  if (limit != null) q.set("limit", String(limit));
+  if (opts?.limit != null) q.set("limit", String(opts.limit));
+  if (opts?.start) q.set("start", opts.start);
+  if (opts?.end) q.set("end", opts.end);
+  if (opts?.lookback != null && opts.lookback > 0) {
+    q.set("lookback", String(opts.lookback));
+  }
   return json<{
     tf: string;
     count: number;
     candles: Candle[];
     total_available?: number;
+    replay_from_index?: number;
   }>(`/api/candles?${q}`);
+}
+
+/** Full history bounds for the replay period picker. */
+export function fetchRange(tf: string) {
+  const q = new URLSearchParams({ tf });
+  return json<{
+    tf: string;
+    count: number;
+    start: string | null;
+    end: string | null;
+    start_unix: number | null;
+    end_unix: number | null;
+  }>(`/api/range?${q}`);
 }
 
 export function runBacktest(body: {

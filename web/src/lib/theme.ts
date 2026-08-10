@@ -24,13 +24,26 @@ export function applyDocumentTheme(scheme: ColorScheme) {
   document.documentElement.setAttribute("data-theme", scheme);
 }
 
+/** True for phone-width or coarse touch UIs. */
+export function isCompactChartUi() {
+  if (typeof window === "undefined") return false;
+  return (
+    window.matchMedia("(max-width: 768px)").matches ||
+    window.matchMedia("(hover: none) and (pointer: coarse)").matches
+  );
+}
+
 /** Lightweight Charts layout colors for the active scheme. */
-export function chartThemeOptions(scheme: ColorScheme) {
+export function chartThemeOptions(scheme: ColorScheme, compact = false) {
+  const fontSize = compact ? 10 : 12;
+  const priceMinWidth = compact ? 52 : 64;
+
   if (scheme === "light") {
     return {
       layout: {
         background: { color: "#ffffff" },
         textColor: "#131722",
+        fontSize,
       },
       grid: {
         vertLines: { color: "#e0e3eb" },
@@ -41,8 +54,28 @@ export function chartThemeOptions(scheme: ColorScheme) {
         vertLine: { color: "#9598a1", labelBackgroundColor: "#2962ff" },
         horzLine: { color: "#9598a1", labelBackgroundColor: "#2962ff" },
       },
-      rightPriceScale: { borderColor: "#e0e3eb" },
-      timeScale: { borderColor: "#e0e3eb" },
+      rightPriceScale: {
+        borderColor: "#e0e3eb",
+        minimumWidth: priceMinWidth,
+        entireTextOnly: true,
+      },
+      timeScale: {
+        borderColor: "#e0e3eb",
+        timeVisible: true,
+        secondsVisible: false,
+      },
+      handleScroll: {
+        mouseWheel: true,
+        pressedMouseMove: true,
+        horzTouchDrag: true,
+        vertTouchDrag: true,
+      },
+      handleScale: {
+        axisPressedMouseMove: true,
+        axisDoubleClickReset: true,
+        mouseWheel: true,
+        pinch: true,
+      },
     };
   }
 
@@ -50,6 +83,7 @@ export function chartThemeOptions(scheme: ColorScheme) {
     layout: {
       background: { color: "#131722" },
       textColor: "#d1d4dc",
+      fontSize,
     },
     grid: {
       vertLines: { color: "#1e222d" },
@@ -60,7 +94,27 @@ export function chartThemeOptions(scheme: ColorScheme) {
       vertLine: { color: "#758696", labelBackgroundColor: "#2962ff" },
       horzLine: { color: "#758696", labelBackgroundColor: "#2962ff" },
     },
-    rightPriceScale: { borderColor: "#2a2e39" },
-    timeScale: { borderColor: "#2a2e39" },
+    rightPriceScale: {
+      borderColor: "#2a2e39",
+      minimumWidth: priceMinWidth,
+      entireTextOnly: true,
+    },
+    timeScale: {
+      borderColor: "#2a2e39",
+      timeVisible: true,
+      secondsVisible: false,
+    },
+    handleScroll: {
+      mouseWheel: true,
+      pressedMouseMove: true,
+      horzTouchDrag: true,
+      vertTouchDrag: true,
+    },
+    handleScale: {
+      axisPressedMouseMove: true,
+      axisDoubleClickReset: true,
+      mouseWheel: true,
+      pinch: true,
+    },
   };
 }

@@ -8,8 +8,10 @@ type PeriodProps = {
   to: string;
   min: string;
   max: string;
+  historyLabel?: string;
   disabled?: boolean;
-  onStart: (from: string, to: string) => void;
+  loading?: boolean;
+  onStart: (from: string, to: string) => void | Promise<void>;
   onExit: () => void;
 };
 
@@ -22,13 +24,16 @@ export function ReplayPeriodPop({
   to,
   min,
   max,
+  historyLabel,
   disabled,
+  loading,
   onStart,
   onExit,
 }: PeriodProps) {
   const rootRef = useRef<HTMLDivElement>(null);
   const [draftFrom, setDraftFrom] = useState(from);
   const [draftTo, setDraftTo] = useState(to);
+  const [busy, setBusy] = useState(false);
 
   useEffect(() => {
     if (!open) return;
@@ -53,6 +58,8 @@ export function ReplayPeriodPop({
   }, [open, onOpenChange]);
 
   const canApply =
+    !busy &&
+    !loading &&
     !!draftFrom &&
     !!draftTo &&
     draftFrom <= draftTo &&
@@ -65,7 +72,7 @@ export function ReplayPeriodPop({
         type="button"
         className={`replay-toggle ${replayOn || open ? "on" : ""}`}
         disabled={disabled}
-        title="Bar replay — choose a period to play like a live market"
+        title="Bar replay — choose any period in FinHub history"
         onClick={() => onOpenChange(!open)}
       >
         Replay
@@ -74,13 +81,16 @@ export function ReplayPeriodPop({
       {open && (
         <div className="replay-pop" role="dialog" aria-label="Replay period">
           <div className="replay-pop-title">Replay period</div>
+          {historyLabel && (
+            <div className="replay-pop-meta">{historyLabel}</div>
+          )}
           <label className="replay-field stack">
             <span>From</span>
             <input
               type="datetime-local"
               value={draftFrom}
-              min={min}
-              max={draftTo || max}
+              min={min || undefined}
+              max={draftTo || max || undefined}
               onChange={(e) => setDraftFrom(e.target.value)}
             />
           </label>
@@ -89,8 +99,8 @@ export function ReplayPeriodPop({
             <input
               type="datetime-local"
               value={draftTo}
-              min={draftFrom || min}
-              max={max}
+              min={draftFrom || min || undefined}
+              max={max || undefined}
               onChange={(e) => setDraftTo(e.target.value)}
             />
           </label>
@@ -99,6 +109,7 @@ export function ReplayPeriodPop({
               <button
                 type="button"
                 className="replay-btn"
+                disabled={busy || loading}
                 onClick={() => {
                   onExit();
                   onOpenChange(false);
@@ -111,13 +122,18 @@ export function ReplayPeriodPop({
               type="button"
               className="replay-btn play"
               disabled={!canApply}
-              onClick={() => {
+              onClick={async () => {
                 if (!canApply) return;
-                onStart(draftFrom, draftTo);
-                onOpenChange(false);
+                setBusy(true);
+                try {
+                  await onStart(draftFrom, draftTo);
+                  onOpenChange(false);
+                } finally {
+                  setBusy(false);
+                }
               }}
             >
-              {replayOn ? "Apply" : "Start"}
+              {busy || loading ? "Loading…" : replayOn ? "Apply" : "Start"}
             </button>
           </div>
         </div>
@@ -176,7 +192,10 @@ export default function ReplayBar({
           onClick={onPlayPause}
           title={playing ? "Pause" : "Play"}
         >
-          {playing ? "Pause" : "Play"}
+          <span className="replay-play-full">{playing ? "Pause" : "Play"}</span>
+          <span className="replay-play-short" aria-hidden>
+            {playing ? "❚❚" : "▶"}
+          </span>
         </button>
         <button
           type="button"

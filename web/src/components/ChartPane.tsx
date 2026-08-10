@@ -16,7 +16,14 @@ import {
   type IndicatorId,
 } from "../lib/indicators";
 import { isNavTool, type Drawing, type ToolId } from "../lib/drawings";
-import { chartThemeOptions, type ColorScheme } from "../lib/theme";
+import {
+  chartThemeOptions,
+  isCompactChartUi,
+  type ColorScheme,
+} from "../lib/theme";
+
+/** Bars visible on first paint for phone — fitContent on 4k+ bars is unusable. */
+const MOBILE_VISIBLE_BARS = 120;
 import DrawingOverlay from "./DrawingOverlay";
 
 type Props = {
@@ -91,7 +98,7 @@ export default function ChartPane({
     if (!mainRef.current) return;
 
     const m = createChart(mainRef.current, {
-      ...chartThemeOptions(colorScheme),
+      ...chartThemeOptions(colorScheme, isCompactChartUi()),
       width: mainRef.current.clientWidth,
       height: mainRef.current.clientHeight,
     });
@@ -157,12 +164,23 @@ export default function ChartPane({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Keep chart chrome in sync with light/dark without remounting
+  // Keep chart chrome in sync with light/dark / compact without remounting
   useEffect(() => {
-    const opts = chartThemeOptions(colorScheme);
-    mainChart.current?.applyOptions(opts);
-    rsiChart.current?.applyOptions(opts);
-    macdChart.current?.applyOptions(opts);
+    const apply = () => {
+      const opts = chartThemeOptions(colorScheme, isCompactChartUi());
+      mainChart.current?.applyOptions(opts);
+      rsiChart.current?.applyOptions(opts);
+      macdChart.current?.applyOptions(opts);
+    };
+    apply();
+    const mq = window.matchMedia("(max-width: 768px)");
+    const onChange = () => apply();
+    mq.addEventListener?.("change", onChange);
+    window.addEventListener("orientationchange", onChange);
+    return () => {
+      mq.removeEventListener?.("change", onChange);
+      window.removeEventListener("orientationchange", onChange);
+    };
   }, [colorScheme]);
 
   useEffect(() => {
@@ -176,7 +194,7 @@ export default function ChartPane({
     }
     if (!rsiRef.current || rsiChart.current) return;
     const chart = createChart(rsiRef.current, {
-      ...chartThemeOptions(colorScheme),
+      ...chartThemeOptions(colorScheme, isCompactChartUi()),
       width: rsiRef.current.clientWidth,
       height: rsiRef.current.clientHeight,
     });
@@ -211,7 +229,7 @@ export default function ChartPane({
     }
     if (!macdRef.current || macdChart.current) return;
     const chart = createChart(macdRef.current, {
-      ...chartThemeOptions(colorScheme),
+      ...chartThemeOptions(colorScheme, isCompactChartUi()),
       width: macdRef.current.clientWidth,
       height: macdRef.current.clientHeight,
     });
@@ -379,7 +397,15 @@ export default function ChartPane({
     } else if (sameSeries) {
       // Keep the user's pan/zoom — do not fitContent on replay step/pause
     } else if (next > 0) {
-      mainChart.current?.timeScale().fitContent();
+      if (isCompactChartUi()) {
+        const width = Math.min(MOBILE_VISIBLE_BARS, next);
+        mainChart.current?.timeScale().setVisibleLogicalRange({
+          from: Math.max(-2, next - width),
+          to: next + 2,
+        });
+      } else {
+        mainChart.current?.timeScale().fitContent();
+      }
     }
 
     prevCandleCount.current = next;
@@ -490,9 +516,24 @@ export default function ChartPane({
 
   useEffect(() => {
     const nav = isNavTool(tool);
+    const scrollOn = nav && tool !== "crosshair";
     mainChart.current?.applyOptions({
-      handleScroll: nav && tool !== "crosshair",
-      handleScale: nav,
+      handleScroll: scrollOn
+        ? {
+            mouseWheel: true,
+            pressedMouseMove: true,
+            horzTouchDrag: true,
+            vertTouchDrag: true,
+          }
+        : false,
+      handleScale: nav
+        ? {
+            axisPressedMouseMove: true,
+            axisDoubleClickReset: true,
+            mouseWheel: true,
+            pinch: true,
+          }
+        : false,
       crosshair: {
         // 0 Normal = follows cursor exactly; 1 Magnet snaps to OHLC; 2 Hidden
         mode: tool === "dot" ? 2 : magnet ? 1 : 0,

@@ -121,22 +121,116 @@ def load_ohlc(
     return df.reset_index(drop=True)
 
 
+def candles_range(tf: str) -> dict:
+    """Full dataset bounds for a timeframe (uses in-memory/R2 cache)."""
+    df = _load_df(tf)
+    if df.empty:
+        return {
+            "tf": tf.upper(),
+            "count": 0,
+            "start": None,
+            "end": None,
+            "start_unix": None,
+            "end_unix": None,
+        }
+    start_ts = df["datetime"].iloc[0]
+    end_ts = df["datetime"].iloc[-1]
+    return {
+        "tf": tf.upper(),
+        "count": int(len(df)),
+        "start": start_ts.isoformat(),
+        "end": end_ts.isoformat(),
+        "start_unix": int(start_ts.timestamp()),
+        "end_unix": int(end_ts.timestamp()),
+    }
+
+
 def candles_payload(
     tf: str,
     start: str | None = None,
     end: str | None = None,
     limit: int | None = None,
+    lookback: int = 0,
 ) -> dict:
-    """Return OHLC candles. `total_available` is always the untruncated filtered length."""
-    df = _load_df(tf)
+    """Return OHLC candles.
+
+    When `start`/`end` are set, return that window (plus optional `lookback`
+    bars before `start` for indicators). `total_available` is the filtered
+    window size before any hard cap error.
+    """
+    df_full = _load_df(tf)
+    if df_full.empty:
+        return {
+            "tf": tf.upper(),
+            "count": 0,
+            "candles": [],
+            "total_available": 0,
+            "replay_from_index": 0,
+        }
+
+    begin = 0
+    end_pos = len(df_full) - 1
+    replay_from_index = 0
+
     if start:
-        df = df[df["datetime"] >= pd.to_datetime(start, utc=True)]
+        start_ts = pd.to_datetime(start, utc=True)
+        ge = df_full["datetime"] >= start_ts
+        if not bool(ge.any()):
+            return {
+                "tf": tf.upper(),
+                "count": 0,
+                "candles": [],
+                "total_available": 0,
+                "replay_from_index": 0,
+            }
+        pos = int(ge.to_numpy().nonzero()[0][0])
+        look = max(0, int(lookback or 0))
+        begin = max(0, pos - look)
+        replay_from_index = pos - begin
+
     if end:
-        df = df[df["datetime"] <= pd.to_datetime(end, utc=True)]
+        end_ts = pd.to_datetime(end, utc=True)
+        le = df_full["datetime"] <= end_ts
+        if not bool(le.any()):
+            return {
+                "tf": tf.upper(),
+                "count": 0,
+                "candles": [],
+                "total_available": 0,
+                "replay_from_index": 0,
+            }
+        end_pos = int(le.to_numpy().nonzero()[0][-1])
+
+    if begin > end_pos:
+        return {
+            "tf": tf.upper(),
+            "count": 0,
+            "candles": [],
+            "total_available": 0,
+            "replay_from_index": 0,
+        }
+
+    df = df_full.iloc[begin : end_pos + 1]
     total_available = len(df)
-    if limit is not None and limit > 0 and total_available > limit:
-        df = df.iloc[-limit:]
-    df = df.reset_index(drop=True)
+
+    # Chart "recent window" mode: no start/end, just trailing limit
+    if start is None and end is None and limit is not None and limit > 0:
+        if total_available > limit:
+            df = df.iloc[-limit:]
+            total_available = len(df_full)  # true history size
+            replay_from_index = 0
+            df = df.reset_index(drop=True)
+        else:
+            df = df.reset_index(drop=True)
+    else:
+        # Explicit period (replay): refuse huge windows instead of silently truncating
+        max_window = 100_000
+        if total_available > max_window:
+            raise ValueError(
+                f"Period has {total_available:,} bars (max {max_window:,}). "
+                "Narrow From/To or use a higher timeframe."
+            )
+        df = df.reset_index(drop=True)
 
     if df.empty:
         return {
@@ -144,6 +238,7 @@ def candles_payload(
             "count": 0,
             "candles": [],
             "total_available": 0,
+            "replay_from_index": 0,
         }
 
     times = (df["datetime"].astype("int64") // 1_000_000_000).to_numpy()
@@ -168,5 +263,6 @@ def candles_payload(
         "tf": tf.upper(),
         "count": len(candles),
         "candles": candles,
-        "total_available": total_available,
+        "total_available": int(total_available),
+        "replay_from_index": int(replay_from_index),
     }

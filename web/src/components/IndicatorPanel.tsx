@@ -54,7 +54,8 @@ export default function IndicatorPanel({ active, onToggle }: Props) {
         aria-expanded={open}
         aria-haspopup="listbox"
       >
-        <span>Indicators</span>
+        <span className="ind-menu-label-full">Indicators</span>
+        <span className="ind-menu-label-short">Ind</span>
         {count > 0 && <em className="ind-count">{count}</em>}
         <svg width="10" height="10" viewBox="0 0 10 10" aria-hidden>
           <path d="M2 3.5L5 7l3-3.5" fill="none" stroke="currentColor" strokeWidth="1.4" />

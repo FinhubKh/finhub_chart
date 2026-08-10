@@ -8,7 +8,7 @@ from pydantic import BaseModel, Field
 
 from .backtester import result_to_dict, run_backtest
 from .config import TIMEFRAMES
-from .data_loader import candles_payload, load_ohlc, timeframe_status
+from .data_loader import candles_payload, candles_range, load_ohlc, timeframe_status
 from .strategies import create_strategy, list_strategies
 
 app = FastAPI(title="Finhubkh XAUUSD Terminal", version="1.0.0")
@@ -59,6 +59,19 @@ def get_strategies():
     return {"strategies": list_strategies()}
 
 
+@app.get("/api/range")
+def get_range(tf: str = Query(..., description="Timeframe e.g. 1H")):
+    """Full history bounds for replay period picking."""
+    try:
+        return candles_range(tf)
+    except FileNotFoundError as e:
+        raise HTTPException(status_code=404, detail=str(e)) from e
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+    except RuntimeError as e:
+        raise HTTPException(status_code=502, detail=str(e)) from e
+
+
 @app.get("/api/candles")
 def get_candles(
     tf: str = Query(..., description="Timeframe e.g. 15M"),
@@ -68,11 +81,19 @@ def get_candles(
         None,
         ge=1,
         le=5_000_000,
-        description="Optional cap. Omit to load the entire history.",
+        description="Optional trailing cap when start/end are omitted.",
+    ),
+    lookback: int = Query(
+        0,
+        ge=0,
+        le=5_000,
+        description="Extra bars before `start` (for indicators during replay).",
     ),
 ):
     try:
-        return candles_payload(tf, start=start, end=end, limit=limit)
+        return candles_payload(
+            tf, start=start, end=end, limit=limit, lookback=lookback
+        )
     except FileNotFoundError as e:
         raise HTTPException(status_code=404, detail=str(e)) from e
     except ValueError as e:

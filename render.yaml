@@ -7,6 +7,14 @@ services:
     dockerfilePath: ./api/Dockerfile
     dockerContext: .
     healthCheckPath: /api/health
+    branch: main
+    autoDeploy: true
+    buildFilter:
+      paths:
+        - api/**
+        - Dockerfile
+        - api/Dockerfile
+        - render.yaml
     envVars:
       - key: FINHUB_DATA_SOURCE
         value: r2

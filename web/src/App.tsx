@@ -3,7 +3,7 @@ import ChartPane from "./components/ChartPane";
 import IndicatorPanel from "./components/IndicatorPanel";
 import ReplayBar, { ReplayPeriodPop } from "./components/ReplayBar";
 import Toolbar from "./components/Toolbar";
-import { fetchCandles, fetchTimeframes, type Candle, type TimeframeFile } from "./api";
+import { fetchCandles, fetchRange, fetchTimeframes, type Candle, type TimeframeFile } from "./api";
 import type { Drawing, ToolId } from "./lib/drawings";
 import type { IndicatorId } from "./lib/indicators";
 import {
@@ -26,9 +26,16 @@ const TFS = ["1M", "5M", "15M", "1H", "4H", "1D", "1W", "1MN"];
 const INITIAL_BARS = 4_000;
 /** Cap chart payload so 1M/5M never dump 900k bars into the browser at once. */
 const HYDRATE_CAP = 50_000;
+/** Extra bars before replay From — keeps indicators warm. */
+const REPLAY_LOOKBACK = 500;
 
 /** Base interval between bars at 1x speed. */
 const REPLAY_TICK_MS = 400;
+
+/** datetime-local → ISO UTC for the API. */
+function localInputToIso(value: string): string {
+  return new Date(value).toISOString();
+}
 
 export default function App() {
   const [tf, setTf] = useState("1H");
@@ -54,14 +61,38 @@ export default function App() {
     saveTheme(colorScheme);
   }, [colorScheme]);
 
+  // Keep app height aligned with the real visible viewport (iOS Safari chrome).
+  useEffect(() => {
+    const sync = () => {
+      const h = window.visualViewport?.height ?? window.innerHeight;
+      document.documentElement.style.setProperty("--app-height", `${Math.round(h)}px`);
+    };
+    sync();
+    window.visualViewport?.addEventListener("resize", sync);
+    window.visualViewport?.addEventListener("scroll", sync);
+    window.addEventListener("resize", sync);
+    window.addEventListener("orientationchange", sync);
+    return () => {
+      window.visualViewport?.removeEventListener("resize", sync);
+      window.visualViewport?.removeEventListener("scroll", sync);
+      window.removeEventListener("resize", sync);
+      window.removeEventListener("orientationchange", sync);
+    };
+  }, []);
+
   // —— Bar replay ——
   const [replayOn, setReplayOn] = useState(false);
   const [replayPopOpen, setReplayPopOpen] = useState(false);
+  const [replayLoading, setReplayLoading] = useState(false);
   const [fromInput, setFromInput] = useState("");
   const [toInput, setToInput] = useState("");
   const [playhead, setPlayhead] = useState(0);
   const [playing, setPlaying] = useState(false);
   const [speed, setSpeed] = useState(1);
+  /** Full dataset bounds for the period picker (not just the loaded window). */
+  const [historyMin, setHistoryMin] = useState("");
+  const [historyMax, setHistoryMax] = useState("");
+  const [historyCount, setHistoryCount] = useState(0);
 
   useEffect(() => {
     let cancelled = false;
@@ -86,8 +117,14 @@ export default function App() {
     setReplayOn(false);
     setPlaying(false);
     setReplayPopOpen(false);
+    setReplayLoading(false);
+    setFromInput("");
+    setToInput("");
+    setHistoryMin("");
+    setHistoryMax("");
+    setHistoryCount(0);
 
-    fetchCandles(tf, INITIAL_BARS)
+    fetchCandles(tf, { limit: INITIAL_BARS })
       .then((res) => {
         if (cancelled) return;
         setCandles(res.candles);
@@ -98,7 +135,7 @@ export default function App() {
         if (target <= res.count) return;
 
         setHydrating(true);
-        return fetchCandles(tf, target).then((full) => {
+        return fetchCandles(tf, { limit: target }).then((full) => {
           if (cancelled) return;
           setCandles(full.candles);
         });
@@ -116,15 +153,27 @@ export default function App() {
         }
       });
 
+    // Full history bounds for replay (may load TF into API RAM once)
+    fetchRange(tf)
+      .then((range) => {
+        if (cancelled) return;
+        if (range.start_unix != null) setHistoryMin(unixToLocalInput(range.start_unix));
+        if (range.end_unix != null) setHistoryMax(unixToLocalInput(range.end_unix));
+        setHistoryCount(range.count || 0);
+      })
+      .catch(() => {
+        /* picker falls back to loaded candles */
+      });
+
     return () => {
       cancelled = true;
     };
   }, [tf]);
 
-  const dataMin = candles[0] ? unixToLocalInput(candles[0].time) : "";
-  const dataMax = candles.length
-    ? unixToLocalInput(candles[candles.length - 1].time)
-    : "";
+  const dataMin = historyMin || (candles[0] ? unixToLocalInput(candles[0].time) : "");
+  const dataMax =
+    historyMax ||
+    (candles.length ? unixToLocalInput(candles[candles.length - 1].time) : "");
 
   const defaultFromTo = useMemo(() => {
     if (!candles.length) return { from: "", to: "" };
@@ -173,21 +222,63 @@ export default function App() {
 
   const defaultPeriod = () => defaultFromTo;
 
-  const startReplay = (from: string, to: string) => {
-    if (!candles.length) return;
-    const fromI = indexAtOrAfter(candles, localInputToUnix(from));
-    const toI = indexAtOrBefore(candles, localInputToUnix(to));
-    const start = Math.min(fromI, toI);
-    setFromInput(from);
-    setToInput(to);
-    setPlayhead(start);
+  const reloadRecentChart = async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const res = await fetchCandles(tf, { limit: INITIAL_BARS });
+      setCandles(res.candles);
+      const total = res.total_available ?? res.count;
+      const target = Math.min(total, HYDRATE_CAP);
+      if (target > res.count) {
+        setHydrating(true);
+        const full = await fetchCandles(tf, { limit: target });
+        setCandles(full.candles);
+      }
+    } catch (err) {
+      setError(String((err as Error).message || err));
+    } finally {
+      setLoading(false);
+      setHydrating(false);
+    }
+  };
+
+  const startReplay = async (from: string, to: string) => {
     setPlaying(false);
-    setReplayOn(true);
+    setReplayLoading(true);
+    setError(null);
+    try {
+      const res = await fetchCandles(tf, {
+        start: localInputToIso(from),
+        end: localInputToIso(to),
+        lookback: REPLAY_LOOKBACK,
+      });
+      if (!res.candles.length) {
+        throw new Error("No candles in that period");
+      }
+      const fromI =
+        res.replay_from_index ??
+        indexAtOrAfter(res.candles, localInputToUnix(from));
+      const toI = indexAtOrBefore(res.candles, localInputToUnix(to));
+      const start = Math.min(fromI, toI);
+      setCandles(res.candles);
+      setFromInput(from);
+      setToInput(to);
+      setPlayhead(start);
+      setReplayOn(true);
+    } catch (err) {
+      setError(String((err as Error).message || err));
+    } finally {
+      setReplayLoading(false);
+    }
   };
 
   const stopReplay = () => {
     setPlaying(false);
     setReplayOn(false);
+    setFromInput("");
+    setToInput("");
+    void reloadRecentChart();
   };
 
   const step = (dir: -1 | 1) => {
@@ -199,10 +290,16 @@ export default function App() {
   };
 
   const openReplayPop = (open: boolean) => {
-    if (open && candles.length && !fromInput && !toInput) {
+    if (open && !fromInput && !toInput) {
       const d = defaultPeriod();
-      setFromInput(d.from);
-      setToInput(d.to);
+      // Prefer a recent slice inside full history when available
+      if (d.from && d.to) {
+        setFromInput(d.from);
+        setToInput(d.to);
+      } else if (historyMax) {
+        setToInput(historyMax);
+        setFromInput(historyMin || historyMax);
+      }
     }
     setReplayPopOpen(open);
   };
@@ -218,16 +315,20 @@ export default function App() {
     });
   };
 
-  const chartBusy = loading || hydrating;
-  const chartBusyMsg = loading
-    ? `Loading ${tf}…`
-    : `Loading more ${tf} history…`;
+  const chartBusy = loading || hydrating || replayLoading;
+  const chartBusyMsg = replayLoading
+    ? "Loading replay period…"
+    : loading
+      ? `Loading ${tf}…`
+      : `Loading more ${tf} history…`;
 
   const barLabel = chartBusy
     ? `FinHub · ${tf}`
     : replayOn
       ? `Replay · ${visibleCandles.length.toLocaleString()} / ${candles.length.toLocaleString()}`
-      : `${candles.length.toLocaleString()} bars · ${tf}`;
+      : historyCount > 0
+        ? `${candles.length.toLocaleString()} bars · ${tf} · ${historyCount.toLocaleString()} total`
+        : `${candles.length.toLocaleString()} bars · ${tf}`;
 
   const progressLabel =
     replayOn && candles[playhead]
@@ -243,7 +344,7 @@ export default function App() {
         </div>
 
         <div className="topbar-center">
-          <div className="tf-row">
+          <div className="tf-row" role="toolbar" aria-label="Timeframes">
             {TFS.map((item) => {
               const meta = fileMap[item];
               const missing = meta ? !meta.exists : false;
@@ -260,10 +361,73 @@ export default function App() {
               );
             })}
           </div>
+        </div>
+
+        <div className="topbar-actions">
           <IndicatorPanel
             active={activeIndicators}
             onToggle={toggleIndicator}
           />
+          <ReplayPeriodPop
+            open={replayPopOpen}
+            onOpenChange={openReplayPop}
+            replayOn={replayOn}
+            from={fromInput || defaultFromTo.from}
+            to={toInput || defaultFromTo.to}
+            min={dataMin}
+            max={dataMax}
+            historyLabel={
+              historyCount > 0
+                ? `${historyCount.toLocaleString()} bars available`
+                : undefined
+            }
+            disabled={loading || replayLoading || (!candles.length && !historyMax)}
+            loading={replayLoading}
+            onStart={startReplay}
+            onExit={stopReplay}
+          />
+          <button
+            type="button"
+            className="theme-toggle"
+            title={
+              colorScheme === "dark"
+                ? "Switch to light mode"
+                : "Switch to dark mode"
+            }
+            aria-label={
+              colorScheme === "dark"
+                ? "Switch to light mode"
+                : "Switch to dark mode"
+            }
+            onClick={() =>
+              setColorScheme((s) => (s === "dark" ? "light" : "dark"))
+            }
+          >
+            {colorScheme === "dark" ? (
+              <svg
+                width="16"
+                height="16"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.8"
+              >
+                <circle cx="12" cy="12" r="4" />
+                <path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4" />
+              </svg>
+            ) : (
+              <svg
+                width="16"
+                height="16"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.8"
+              >
+                <path d="M21 14.5A8.5 8.5 0 0 1 9.5 3 7 7 0 1 0 21 14.5z" />
+              </svg>
+            )}
+          </button>
         </div>
 
         <div className="topbar-right">
@@ -285,38 +449,6 @@ export default function App() {
               onEditPeriod={() => openReplayPop(true)}
             />
           )}
-          <ReplayPeriodPop
-            open={replayPopOpen}
-            onOpenChange={openReplayPop}
-            replayOn={replayOn}
-            from={fromInput || defaultFromTo.from}
-            to={toInput || defaultFromTo.to}
-            min={dataMin}
-            max={dataMax}
-            disabled={loading || candles.length === 0}
-            onStart={startReplay}
-            onExit={stopReplay}
-          />
-          <button
-            type="button"
-            className="theme-toggle"
-            title={colorScheme === "dark" ? "Switch to light mode" : "Switch to dark mode"}
-            aria-label={colorScheme === "dark" ? "Switch to light mode" : "Switch to dark mode"}
-            onClick={() =>
-              setColorScheme((s) => (s === "dark" ? "light" : "dark"))
-            }
-          >
-            {colorScheme === "dark" ? (
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
-                <circle cx="12" cy="12" r="4" />
-                <path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4" />
-              </svg>
-            ) : (
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
-                <path d="M21 14.5A8.5 8.5 0 0 1 9.5 3 7 7 0 1 0 21 14.5z" />
-              </svg>
-            )}
-          </button>
           <div className={`top-meta ${error ? "error" : ""}`}>
             {error || `${barLabel} · drawings ${drawings.length}`}
           </div>
