@@ -10,6 +10,12 @@ services:
     envVars:
       - key: FINHUB_DATA_SOURCE
         value: r2
+      - key: R2_PREFIX
+        value: xauusd
+      - key: CORS_ORIGINS
+        value: https://finhub-chart.vercel.app
+      - key: APP_ROOT
+        value: /app
       - key: R2_ACCOUNT_ID
         sync: false
       - key: R2_ACCESS_KEY_ID
@@ -18,9 +24,5 @@ services:
         sync: false
       - key: R2_BUCKET
         sync: false
-      - key: R2_PREFIX
-        value: xauusd
       - key: R2_ENDPOINT
-        sync: false
-      - key: CORS_ORIGINS
         sync: false
