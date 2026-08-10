@@ -1,6 +1,8 @@
 from pathlib import Path
+import os
 
-ROOT = Path(__file__).resolve().parents[2]
+# Repo root locally; in Docker set APP_ROOT=/app
+ROOT = Path(os.environ.get("APP_ROOT") or Path(__file__).resolve().parents[2])
 DATA_DIR = ROOT / "data" / "xauusd"
 
 TIMEFRAME_FILES = {
