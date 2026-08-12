@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import "./IndicatorPanel.css";
 import { INDICATOR_CATALOG, type IndicatorId } from "../lib/indicators";
 
 type Props = {

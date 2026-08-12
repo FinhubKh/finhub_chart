@@ -15,6 +15,7 @@ import {
 } from "./lib/theme";
 import { loadSettings, saveSettings, type ChartSettings } from "./lib/settings";
 import SettingsModal from "./components/SettingsModal";
+import LoginPage from "./components/LoginPage";
 import {
   formatBarClock,
   indexAtOrAfter,
@@ -63,6 +64,16 @@ export default function App() {
   const [colorScheme, setColorScheme] = useState<ColorScheme>(() => loadTheme());
   const [settings, setSettings] = useState<ChartSettings>(() => loadSettings());
   const [settingsOpen, setSettingsOpen] = useState(false);
+  
+  // Authentication state
+  const [isAuthenticated, setIsAuthenticated] = useState(() => {
+    return localStorage.getItem("finhubkh-auth") === "true";
+  });
+
+  const handleLogin = () => {
+    localStorage.setItem("finhubkh-auth", "true");
+    setIsAuthenticated(true);
+  };
 
   useEffect(() => {
     applyDocumentTheme(colorScheme);
@@ -382,6 +393,10 @@ export default function App() {
     replayOn && candles[playhead]
       ? `${formatBarClock(candles[playhead].time)} · bar ${playhead - fromIdx + 1}/${endIdx - fromIdx + 1}`
       : "";
+
+  if (!isAuthenticated) {
+    return <LoginPage onLogin={handleLogin} />;
+  }
 
   return (
     <div className="app">

@@ -1,0 +1,191 @@
+/* —— TradingView-style left toolbar —— */
+.tv-toolbar {
+  position: relative;
+  z-index: 80;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 10px 6px;
+  border-right: 1px solid var(--border);
+  background: var(--bg);
+  /* visible so flyout menus are not clipped (overflow:auto was hiding tool picks) */
+  overflow: visible;
+}
+
+.tv-sep {
+  width: 40px;
+  height: 1px;
+  margin: 6px 0;
+  background: var(--border);
+}
+
+.tv-btn {
+  position: relative;
+  width: 56px;
+  height: 48px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text);
+  cursor: pointer;
+  display: grid;
+  place-items: center;
+  padding: 0;
+}
+
+.tv-btn:hover {
+  background: var(--hover);
+  color: var(--hover-text);
+}
+
+.tv-btn.active {
+  background: rgba(0, 124, 144, 0.2);
+  color: var(--tv-blue);
+}
+
+.tv-btn.danger:hover {
+  background: rgba(242, 54, 69, 0.15);
+  color: #f23645;
+}
+
+.tv-btn.has-menu {
+  width: 56px;
+}
+
+.tv-caret {
+  position: absolute;
+  right: 3px;
+  bottom: 3px;
+  width: 14px;
+  height: 14px;
+  display: grid;
+  place-items: center;
+  color: var(--muted);
+  border-radius: 2px;
+}
+
+.tv-caret:hover {
+  color: var(--hover-text);
+  background: var(--border-strong);
+}
+
+.tv-flyout-wrap {
+  position: relative;
+}
+
+.tv-flyout {
+  position: absolute;
+  left: 64px;
+  top: 0;
+  min-width: 240px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-strong);
+  border-radius: 6px;
+  box-shadow: var(--shadow);
+  padding: 8px;
+  z-index: 200;
+}
+
+.tv-flyout-title {
+  padding: 8px 12px 10px;
+  font-size: 12px;
+  color: var(--muted);
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 4px;
+}
+
+.tv-flyout-item {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  border: none;
+  background: transparent;
+  color: var(--text);
+  padding: 10px 12px;
+  border-radius: 6px;
+  cursor: pointer;
+  text-align: left;
+  font-size: 14px;
+}
+
+.tv-flyout-item:hover {
+  background: var(--hover);
+  color: var(--hover-text);
+}
+
+.tv-flyout-item.active {
+  background: rgba(0, 124, 144, 0.15);
+  color: var(--tv-blue);
+}
+
+.tv-color {
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  overflow: hidden;
+  border: 2px solid #363a45;
+  cursor: pointer;
+  margin-top: 6px;
+}
+
+.tv-color input {
+  width: 140%;
+  height: 140%;
+  margin: -20%;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  background: none;
+}
+
+.chart-stack {
+  min-width: 0;
+  min-height: 0;
+  display: grid;
+  grid-template-rows: 1fr;
+}
+
+.chart-stack.with-rsi {
+  grid-template-rows: 1fr 160px;
+}
+
+.chart-stack.with-macd {
+  grid-template-rows: 1fr 160px;
+}
+
+.chart-stack.with-rsi.with-macd {
+  grid-template-rows: 1fr 140px 140px;
+}
+
+.chart-main-wrap {
+  position: relative;
+  min-height: 0;
+  min-width: 0;
+}
+
+.chart-main,
+.chart-sub {
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+}
+
+.draw-overlay {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 5;
+}
+
+.structure-overlay {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 4;
+  pointer-events: none;
+}
+

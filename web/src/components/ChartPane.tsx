@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import "./ChartPane.css";
 import {
   createChart,
   type IChartApi,

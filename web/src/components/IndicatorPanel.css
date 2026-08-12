@@ -1,0 +1,148 @@
+/* —— Indicators dropdown (top nav) —— */
+.ind-menu {
+  position: relative;
+  z-index: 60;
+  flex-shrink: 0;
+}
+
+.ind-menu-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  border: 1px solid var(--border);
+  background: var(--bg-elevated);
+  color: var(--text);
+  padding: 0.4rem 0.7rem;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 0.8rem;
+  font-weight: 600;
+}
+
+.ind-menu-btn:hover {
+  border-color: var(--border-strong);
+}
+
+.ind-menu-btn.active {
+  color: var(--tv-blue);
+  background: rgba(0, 124, 144, 0.2);
+  border-color: var(--tv-blue);
+}
+
+.ind-count {
+  font-style: normal;
+  font-family: var(--mono);
+  font-size: 0.68rem;
+  background: var(--tv-blue);
+  color: #fff;
+  border-radius: 999px;
+  min-width: 1.15rem;
+  height: 1.15rem;
+  display: inline-grid;
+  place-items: center;
+  padding: 0 0.28rem;
+}
+
+.ind-dropdown {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  left: auto;
+  z-index: 120;
+  width: min(320px, calc(100vw - 24px));
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-strong);
+  border-radius: 8px;
+  box-shadow: var(--shadow);
+  overflow: hidden;
+}
+
+.ind-search-wrap {
+  padding: 10px;
+  border-bottom: 1px solid var(--border);
+}
+
+.ind-search {
+  width: 100%;
+  border: 1px solid var(--border-strong);
+  background: var(--bg-input);
+  color: var(--text);
+  border-radius: 6px;
+  padding: 0.55rem 0.7rem;
+  font-size: 0.85rem;
+  outline: none;
+}
+
+.ind-search:focus {
+  border-color: var(--tv-blue);
+}
+
+.ind-search::placeholder {
+  color: var(--muted);
+}
+
+.ind-dropdown-list {
+  max-height: 320px;
+  overflow: auto;
+  padding: 6px;
+}
+
+.ind-option {
+  width: 100%;
+  display: grid;
+  grid-template-columns: 22px 1fr auto;
+  align-items: center;
+  gap: 0.5rem;
+  border: none;
+  background: transparent;
+  color: var(--text);
+  padding: 0.55rem 0.6rem;
+  border-radius: 6px;
+  cursor: pointer;
+  text-align: left;
+  font-size: 0.88rem;
+}
+
+.ind-option:hover {
+  background: var(--hover);
+  color: var(--hover-text);
+}
+
+.ind-option.on {
+  background: rgba(0, 124, 144, 0.12);
+}
+
+.ind-check {
+  width: 18px;
+  height: 18px;
+  border: 1px solid var(--border-strong);
+  border-radius: 4px;
+  display: grid;
+  place-items: center;
+  font-size: 0.7rem;
+  color: #fff;
+}
+
+.ind-check.on {
+  background: var(--tv-blue);
+  border-color: var(--tv-blue);
+}
+
+.ind-option-label {
+  font-weight: 500;
+}
+
+.ind-option em {
+  font-style: normal;
+  color: var(--muted);
+  font-family: var(--mono);
+  font-size: 0.68rem;
+}
+
+.ind-empty {
+  padding: 1.2rem 0.75rem;
+  text-align: center;
+  color: var(--muted);
+  font-size: 0.82rem;
+}
+

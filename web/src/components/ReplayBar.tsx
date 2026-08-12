@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import "./ReplayBar.css";
 
 type PeriodProps = {
   open: boolean;

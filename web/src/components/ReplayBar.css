@@ -1,0 +1,189 @@
+/* —— Bar replay —— */
+.replay-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 10px;
+  font-size: 0.78rem;
+}
+
+.replay-bar.topbar-replay {
+  padding: 0;
+  border: none;
+  background: transparent;
+}
+
+.replay-menu {
+  position: relative;
+  z-index: 60;
+}
+
+.replay-toggle {
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--bg-elevated);
+  color: var(--text);
+  padding: 0.4rem 0.7rem;
+  cursor: pointer;
+  font-size: 0.8rem;
+  font-weight: 600;
+}
+
+.replay-toggle:hover:not(:disabled) {
+  border-color: var(--border-strong);
+}
+
+.replay-toggle.on {
+  background: rgba(0, 124, 144, 0.2);
+  border-color: var(--tv-blue);
+  color: var(--tv-blue);
+}
+
+.replay-toggle:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.replay-pop {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  width: 280px;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg-elevated);
+  box-shadow: var(--shadow);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.replay-pop-title {
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.replay-pop-meta {
+  font-size: 0.7rem;
+  color: var(--muted);
+  font-family: var(--mono);
+  margin-top: -4px;
+}
+
+.replay-field.stack {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 4px;
+}
+
+.replay-field.stack input {
+  width: 100%;
+}
+
+.replay-pop-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+.replay-field {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--muted);
+}
+
+.replay-field span {
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.replay-field input,
+.replay-field select {
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  background: var(--bg-input);
+  color: var(--text);
+  padding: 4px 8px;
+  color-scheme: light dark;
+}
+
+[data-theme="light"] .replay-field input,
+[data-theme="light"] .replay-field select {
+  color-scheme: light;
+}
+
+[data-theme="dark"] .replay-field input,
+[data-theme="dark"] .replay-field select {
+  color-scheme: dark;
+}
+
+.replay-field.speed select {
+  min-width: 64px;
+}
+
+.replay-transport {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.replay-btn {
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  background: var(--bg-elevated);
+  color: var(--text);
+  min-width: 36px;
+  height: 30px;
+  padding: 0 10px;
+  cursor: pointer;
+}
+
+.replay-btn:hover:not(:disabled) {
+  border-color: var(--accent);
+}
+
+.replay-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.replay-btn.play {
+  min-width: 64px;
+  background: var(--play-bg);
+  border-color: var(--play-border);
+}
+
+.theme-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--bg-elevated);
+  color: var(--text);
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.theme-toggle:hover {
+  border-color: var(--border-strong);
+  background: var(--hover);
+}
+
+.replay-progress {
+  color: var(--muted);
+  font-family: var(--mono);
+  font-size: 0.72rem;
+  white-space: nowrap;
+  max-width: 220px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
