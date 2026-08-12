@@ -3,6 +3,8 @@ from __future__ import annotations
 import io
 import os
 import threading
+import tempfile
+import concurrent.futures
 from functools import lru_cache
 
 import pandas as pd
@@ -124,15 +126,22 @@ def _fetch_r2_dataframe(tf: str) -> pd.DataFrame:
                 ) from e
             raise
 
-        etag = str(head.get("ETag") or "")
+        etag = str(head.get("ETag") or "").strip('"')
         cached = _df_cache.get(key)
         if cached and cached[0] == etag:
             return cached[1]
 
-        buf = io.BytesIO()
-        _s3().download_fileobj(bucket, obj_key, buf)
-        buf.seek(0)
-        df = _normalize_ohlc(pd.read_csv(buf))
+        tmp_path = Path(tempfile.gettempdir()) / f"finhub_{etag}_{filename}"
+        if tmp_path.exists():
+            try:
+                df = _normalize_ohlc(pd.read_csv(tmp_path))
+                _df_cache[key] = (etag, df)
+                return df
+            except Exception:
+                pass  # Fallback to download if corrupted
+
+        _s3().download_file(bucket, obj_key, str(tmp_path))
+        df = _normalize_ohlc(pd.read_csv(tmp_path))
         _df_cache[key] = (etag, df)
         return df
 
@@ -174,7 +183,9 @@ def r2_timeframe_status() -> list[dict]:
 
     bucket = os.environ["R2_BUCKET"].strip()
     s3 = _s3()
-    for tf, filename in TIMEFRAME_FILES.items():
+    
+    def _check_tf(item: tuple[str, str]) -> dict:
+        tf, filename = item
         obj_key = _object_key(filename)
         exists = False
         size_bytes = 0
@@ -186,17 +197,19 @@ def r2_timeframe_status() -> list[dict]:
         except ClientError:
             pass
 
-        items.append(
-            {
-                "tf": tf,
-                "filename": filename,
-                "exists": exists,
-                "cached": in_memory,  # means held in RAM after a fetch, not on disk
-                "rows": 0,
-                "start": None,
-                "end": None,
-                "size_bytes": size_bytes,
-                "source": "r2",
-            }
-        )
+        return {
+            "tf": tf,
+            "filename": filename,
+            "exists": exists,
+            "cached": in_memory,
+            "rows": 0,
+            "start": None,
+            "end": None,
+            "size_bytes": size_bytes,
+            "source": "r2",
+        }
+
+    with concurrent.futures.ThreadPoolExecutor(max_workers=8) as executor:
+        items = list(executor.map(_check_tf, TIMEFRAME_FILES.items()))
+        
     return items
