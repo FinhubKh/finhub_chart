@@ -84,13 +84,15 @@ export function fetchStrategies() {
   return json<{ strategies: StrategyInfo[] }>("/api/strategies");
 }
 
-/** Load candles. Pass `limit` for a fast recent window, or start/end for a period. */
+/** Load candles. Pass `limit` for a fast recent window, or start/end for a period.
+ *  Pass `before` + `limit` to load older history when the user pans left. */
 export function fetchCandles(
   tf: string,
   opts?: {
     limit?: number;
     start?: string;
     end?: string;
+    before?: string;
     lookback?: number;
   }
 ) {
@@ -98,6 +100,7 @@ export function fetchCandles(
   if (opts?.limit != null) q.set("limit", String(opts.limit));
   if (opts?.start) q.set("start", opts.start);
   if (opts?.end) q.set("end", opts.end);
+  if (opts?.before) q.set("before", opts.before);
   if (opts?.lookback != null && opts.lookback > 0) {
     q.set("lookback", String(opts.lookback));
   }
@@ -107,6 +110,7 @@ export function fetchCandles(
     candles: Candle[];
     total_available?: number;
     replay_from_index?: number;
+    has_more?: boolean;
   }>(`/api/candles?${q}`);
 }
 

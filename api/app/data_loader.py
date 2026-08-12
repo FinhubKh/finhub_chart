@@ -151,12 +151,15 @@ def candles_payload(
     end: str | None = None,
     limit: int | None = None,
     lookback: int = 0,
+    before: str | None = None,
 ) -> dict:
     """Return OHLC candles.
 
-    When `start`/`end` are set, return that window (plus optional `lookback`
-    bars before `start` for indicators). `total_available` is the filtered
-    window size before any hard cap error.
+    Modes:
+    - No start/end/before: trailing `limit` (recent window).
+    - `before` (+ optional `limit`): up to N bars strictly older than `before`
+      (scroll-left history pagination).
+    - `start`/`end`: explicit window (+ optional `lookback` before `start`).
     """
     df_full = _load_df(tf)
     if df_full.empty:
@@ -166,6 +169,51 @@ def candles_payload(
             "candles": [],
             "total_available": 0,
             "replay_from_index": 0,
+            "has_more": False,
+        }
+
+    # —— Scroll-left pagination: N bars ending just before `before` ——
+    if before is not None and start is None and end is None:
+        before_ts = pd.to_datetime(before, utc=True)
+        older = df_full[df_full["datetime"] < before_ts]
+        total_available = int(len(df_full))
+        if older.empty:
+            return {
+                "tf": tf.upper(),
+                "count": 0,
+                "candles": [],
+                "total_available": total_available,
+                "replay_from_index": 0,
+                "has_more": False,
+            }
+        lim = int(limit) if limit is not None and limit > 0 else 4_000
+        chunk = older.iloc[-lim:] if len(older) > lim else older
+        has_more = bool(len(older) > len(chunk))
+        df = chunk.reset_index(drop=True)
+        times = (df["datetime"].astype("int64") // 1_000_000_000).to_numpy()
+        opens = df["open"].to_numpy(dtype=float)
+        highs = df["high"].to_numpy(dtype=float)
+        lows = df["low"].to_numpy(dtype=float)
+        closes = df["close"].to_numpy(dtype=float)
+        volumes = df["volume"].to_numpy(dtype=float)
+        candles = [
+            {
+                "time": int(times[i]),
+                "open": float(opens[i]),
+                "high": float(highs[i]),
+                "low": float(lows[i]),
+                "close": float(closes[i]),
+                "volume": float(volumes[i]),
+            }
+            for i in range(len(df))
+        ]
+        return {
+            "tf": tf.upper(),
+            "count": len(candles),
+            "candles": candles,
+            "total_available": total_available,
+            "replay_from_index": 0,
+            "has_more": has_more,
         }
 
     begin = 0
@@ -182,6 +230,7 @@ def candles_payload(
                 "candles": [],
                 "total_available": 0,
                 "replay_from_index": 0,
+                "has_more": False,
             }
         pos = int(ge.to_numpy().nonzero()[0][0])
         look = max(0, int(lookback or 0))
@@ -198,6 +247,7 @@ def candles_payload(
                 "candles": [],
                 "total_available": 0,
                 "replay_from_index": 0,
+                "has_more": False,
             }
         end_pos = int(le.to_numpy().nonzero()[0][-1])
 
@@ -208,6 +258,7 @@ def candles_payload(
             "candles": [],
             "total_available": 0,
             "replay_from_index": 0,
+            "has_more": False,
         }
 
     df = df_full.iloc[begin : end_pos + 1]
@@ -239,6 +290,7 @@ def candles_payload(
             "candles": [],
             "total_available": 0,
             "replay_from_index": 0,
+            "has_more": False,
         }
 
     times = (df["datetime"].astype("int64") // 1_000_000_000).to_numpy()
@@ -259,10 +311,19 @@ def candles_payload(
         }
         for i in range(len(df))
     ]
+    # Trailing window: more history exists left of the slice
+    has_more = bool(
+        start is None
+        and end is None
+        and limit is not None
+        and limit > 0
+        and total_available > len(candles)
+    )
     return {
         "tf": tf.upper(),
         "count": len(candles),
         "candles": candles,
         "total_available": int(total_available),
         "replay_from_index": int(replay_from_index),
+        "has_more": has_more,
     }

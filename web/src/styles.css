@@ -10,15 +10,15 @@
   --muted: #787b86;
   --hover: #2a2e39;
   --hover-text: #ffffff;
-  --accent: #2962ff;
+  --accent: #007c90;
   --green: #089981;
   --red: #f23645;
   --font: "Trebuchet MS", "Segoe UI", sans-serif;
   --mono: "Trebuchet MS", monospace;
-  --tv-blue: #2962ff;
+  --tv-blue: #007c90;
   --shadow: 0 12px 32px rgba(0, 0, 0, 0.5);
-  --play-bg: #243056;
-  --play-border: #3d5a9e;
+  --play-bg: #003e48;
+  --play-border: #007c90;
 }
 
 [data-theme="light"] {
@@ -32,13 +32,13 @@
   --muted: #787b86;
   --hover: #e0e3eb;
   --hover-text: #131722;
-  --accent: #2962ff;
+  --accent: #007c90;
   --green: #089981;
   --red: #f23645;
-  --tv-blue: #2962ff;
+  --tv-blue: #007c90;
   --shadow: 0 12px 32px rgba(19, 23, 34, 0.12);
-  --play-bg: #e8f0ff;
-  --play-border: #2962ff;
+  --play-bg: #e0f2f5;
+  --play-border: #007c90;
 }
 
 * {
@@ -102,23 +102,98 @@ select {
 
 .brand {
   display: flex;
-  flex-direction: column;
-  gap: 0.1rem;
+  align-items: center;
+  gap: 0.6rem;
   min-width: 0;
   flex-shrink: 0;
 }
 
-.brand strong {
+.brand-text {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+}
+
+.brand-logo {
+  height: 32px;
+  width: auto;
+  object-fit: contain;
+}
+
+.brand-text strong {
   font-size: 1.05rem;
   letter-spacing: 0.02em;
   color: var(--text);
   font-weight: 700;
 }
 
-.brand span {
-  color: var(--muted);
+.pair-menu {
+  position: relative;
+  display: inline-block;
+}
+
+.pair-menu-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: var(--bg-elevated);
+  color: var(--text);
+  border: 1px solid var(--border);
   font-size: 0.75rem;
   font-family: var(--mono);
+  font-weight: 600;
+  padding: 2px 6px;
+  cursor: pointer;
+  border-radius: 4px;
+}
+
+.pair-menu-btn:hover {
+  border-color: var(--border-strong);
+}
+
+.pair-menu-btn.active {
+  color: var(--tv-blue);
+  background: rgba(0, 124, 144, 0.2);
+  border-color: var(--tv-blue);
+}
+
+.pair-dropdown {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  margin-top: 4px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-strong);
+  border-radius: 6px;
+  box-shadow: var(--shadow);
+  z-index: 200;
+  min-width: 100px;
+  display: flex;
+  flex-direction: column;
+  padding: 4px;
+}
+
+.pair-option {
+  background: transparent;
+  border: none;
+  color: var(--text);
+  padding: 6px 8px;
+  text-align: left;
+  font-size: 0.8rem;
+  font-family: var(--mono);
+  cursor: pointer;
+  border-radius: 4px;
+}
+
+.pair-option:hover {
+  background: var(--hover);
+  color: var(--hover-text);
+}
+
+.pair-option.on {
+  background: rgba(0, 124, 144, 0.12);
+  color: var(--accent);
+  font-weight: 600;
 }
 
 .topbar-center {
@@ -313,9 +388,9 @@ select {
 }
 
 .replay-toggle.on {
-  background: rgba(41, 98, 255, 0.2);
+  background: rgba(0, 124, 144, 0.2);
   border-color: var(--tv-blue);
-  color: #fff;
+  color: var(--tv-blue);
 }
 
 .replay-toggle:disabled {
@@ -492,8 +567,8 @@ select {
 }
 
 .ind-menu-btn.active {
-  color: #fff;
-  background: rgba(41, 98, 255, 0.2);
+  color: var(--tv-blue);
+  background: rgba(0, 124, 144, 0.2);
   border-color: var(--tv-blue);
 }
 
@@ -577,7 +652,7 @@ select {
 }
 
 .ind-option.on {
-  background: rgba(41, 98, 255, 0.12);
+  background: rgba(0, 124, 144, 0.12);
 }
 
 .ind-check {
@@ -656,8 +731,8 @@ select {
 }
 
 .tv-btn.active {
-  background: rgba(41, 98, 255, 0.2);
-  color: #2962ff;
+  background: rgba(0, 124, 144, 0.2);
+  color: var(--tv-blue);
 }
 
 .tv-btn.danger:hover {
@@ -732,8 +807,8 @@ select {
 }
 
 .tv-flyout-item.active {
-  background: rgba(41, 98, 255, 0.15);
-  color: #2962ff;
+  background: rgba(0, 124, 144, 0.15);
+  color: var(--tv-blue);
 }
 
 .tv-color {
@@ -794,6 +869,15 @@ select {
   width: 100%;
   height: 100%;
   z-index: 5;
+}
+
+.structure-overlay {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 4;
+  pointer-events: none;
 }
 
 /* Cursor/pan tools: let events hit the chart so scroll/zoom work */

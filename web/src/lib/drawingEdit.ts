@@ -1,4 +1,5 @@
 import type { Drawing, Point } from "./drawings";
+import { positionWidthLogical } from "./drawings";
 
 export type Handle =
   | "a"
@@ -7,6 +8,7 @@ export type Handle =
   | "entry"
   | "stop"
   | "take"
+  | "width"
   | "price"
   | "logical"
   | "at";
@@ -51,7 +53,7 @@ export function hitTestDrawing(
   y: number,
   toXY: (p: Point) => XY | null,
   priceToY: (price: number) => number | null,
-  chartWidth: number
+  _chartWidth: number
 ): Hit | null {
   const HANDLE = 10;
   const LINE = 8;
@@ -64,8 +66,23 @@ export function hitTestDrawing(
       const stopY = priceToY(d.stop);
       const takeY = priceToY(d.take);
       if (!entry || stopY == null || takeY == null) continue;
-      const x0 = entry.x;
-      const x1 = Math.min(chartWidth - 8, x0 + 200);
+      const end = toXY({
+        logical: d.entry.logical + positionWidthLogical(d),
+        price: d.entry.price,
+      });
+      const x0 = Math.min(entry.x, end?.x ?? entry.x + 80);
+      const x1 = Math.max(entry.x, end?.x ?? entry.x + 80);
+      const top = Math.min(entry.y, stopY, takeY);
+      const bot = Math.max(entry.y, stopY, takeY);
+
+      // Right-edge width handle (priority over body)
+      if (
+        Math.abs(x - x1) < HANDLE + 2 &&
+        y >= top - HANDLE &&
+        y <= bot + HANDLE
+      ) {
+        return { index: i, id: d.id, handle: "width" };
+      }
       if (x >= x0 - 4 && x <= x1 + 40) {
         if (Math.abs(y - entry.y) < HANDLE) {
           return { index: i, id: d.id, handle: "entry" };
@@ -76,8 +93,6 @@ export function hitTestDrawing(
         if (Math.abs(y - takeY) < HANDLE) {
           return { index: i, id: d.id, handle: "take" };
         }
-        const top = Math.min(entry.y, stopY, takeY);
-        const bot = Math.max(entry.y, stopY, takeY);
         if (x >= x0 && x <= x1 && y >= top && y <= bot) {
           return { index: i, id: d.id, handle: "body" };
         }
@@ -202,12 +217,18 @@ export function applyEdit(
       else take = Math.min(take, original.entry.price - 0.01);
       return { ...original, take };
     }
+    if (handle === "width") {
+      // Drag right edge — width in bars from entry (min 2)
+      const widthLogical = Math.max(2, curPtr.logical - original.entry.logical);
+      return { ...original, widthLogical };
+    }
     // body — move time + all prices together
     return {
       ...original,
       entry: shiftPoint(original.entry, dLogical, dPrice),
       stop: original.stop + dPrice,
       take: original.take + dPrice,
+      widthLogical: positionWidthLogical(original),
     };
   }
 
@@ -285,7 +306,7 @@ export function cursorForHandle(handle: Handle): string {
   if (handle === "stop" || handle === "take" || handle === "entry" || handle === "price") {
     return "ns-resize";
   }
-  if (handle === "logical") return "ew-resize";
+  if (handle === "logical" || handle === "width") return "ew-resize";
   if (handle === "a" || handle === "b") return "grab";
   return "move";
 }

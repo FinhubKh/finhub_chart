@@ -1,8 +1,9 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import ChartPane from "./components/ChartPane";
 import IndicatorPanel from "./components/IndicatorPanel";
 import ReplayBar, { ReplayPeriodPop } from "./components/ReplayBar";
 import Toolbar from "./components/Toolbar";
+import PairDropdown from "./components/PairDropdown";
 import { fetchCandles, fetchRange, fetchTimeframes, type Candle, type TimeframeFile } from "./api";
 import type { Drawing, ToolId } from "./lib/drawings";
 import type { IndicatorId } from "./lib/indicators";
@@ -12,6 +13,8 @@ import {
   saveTheme,
   type ColorScheme,
 } from "./lib/theme";
+import { loadSettings, saveSettings, type ChartSettings } from "./lib/settings";
+import SettingsModal from "./components/SettingsModal";
 import {
   formatBarClock,
   indexAtOrAfter,
@@ -22,10 +25,12 @@ import {
 
 const TFS = ["1M", "5M", "15M", "1H", "4H", "1D", "1W", "1MN"];
 
-/** First paint: recent window only. More history hydrates in the background. */
-const INITIAL_BARS = 4_000;
-/** Cap chart payload so 1M/5M never dump 900k bars into the browser at once. */
-const HYDRATE_CAP = 50_000;
+/** Initial bars to load for fast first paint. */
+const INITIAL_BARS = 1_000;
+/** Chunk size when scrolling into older history. */
+const OLDER_CHUNK = 4_000;
+/** Soft browser memory ceiling (1M can be 900k+). */
+const CLIENT_MAX_BARS = 200_000;
 /** Extra bars before replay From — keeps indicators warm. */
 const REPLAY_LOOKBACK = 500;
 
@@ -38,14 +43,15 @@ function localInputToIso(value: string): string {
 }
 
 export default function App() {
+  const [pair, setPair] = useState("XAUUSD");
   const [tf, setTf] = useState("1H");
   const [files, setFiles] = useState<TimeframeFile[]>([]);
   const [candles, setCandles] = useState<Candle[]>([]);
   const [loading, setLoading] = useState(false);
-  const [hydrating, setHydrating] = useState(false);
+
   const [error, setError] = useState<string | null>(null);
   const [tool, setTool] = useState<ToolId>("cursor");
-  const [color, setColor] = useState("#2962ff");
+  const [color, setColor] = useState("#007c90");
   const [drawings, setDrawings] = useState<Drawing[]>([]);
   const [selectedDrawingId, setSelectedDrawingId] = useState<string | null>(null);
   const [stayInDraw, setStayInDraw] = useState(false);
@@ -55,11 +61,22 @@ export default function App() {
     () => new Set()
   );
   const [colorScheme, setColorScheme] = useState<ColorScheme>(() => loadTheme());
+  const [settings, setSettings] = useState<ChartSettings>(() => loadSettings());
+  const [settingsOpen, setSettingsOpen] = useState(false);
 
   useEffect(() => {
     applyDocumentTheme(colorScheme);
     saveTheme(colorScheme);
-  }, [colorScheme]);
+    
+    // Apply background colors to root variables so the whole app syncs
+    const bg = colorScheme === "dark" ? settings.bgDark : settings.bgLight;
+    document.documentElement.style.setProperty("--bg", bg);
+    document.documentElement.style.setProperty("--bg-panel", bg);
+  }, [colorScheme, settings]);
+
+  useEffect(() => {
+    saveSettings(settings);
+  }, [settings]);
 
   // Keep app height aligned with the real visible viewport (iOS Safari chrome).
   useEffect(() => {
@@ -93,6 +110,13 @@ export default function App() {
   const [historyMin, setHistoryMin] = useState("");
   const [historyMax, setHistoryMax] = useState("");
   const [historyCount, setHistoryCount] = useState(0);
+  const [historyStartUnix, setHistoryStartUnix] = useState<number | null>(null);
+
+  const loadingOlderRef = useRef(false);
+  const candlesRef = useRef<Candle[]>([]);
+  const tfRef = useRef(tf);
+  candlesRef.current = candles;
+  tfRef.current = tf;
 
   useEffect(() => {
     let cancelled = false;
@@ -111,7 +135,7 @@ export default function App() {
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
-    setHydrating(false);
+
     setError(null);
     setCandles([]);
     setReplayOn(false);
@@ -123,22 +147,14 @@ export default function App() {
     setHistoryMin("");
     setHistoryMax("");
     setHistoryCount(0);
+    setHistoryStartUnix(null);
+
+    loadingOlderRef.current = false;
 
     fetchCandles(tf, { limit: INITIAL_BARS })
       .then((res) => {
         if (cancelled) return;
         setCandles(res.candles);
-        setLoading(false);
-
-        const total = res.total_available ?? res.count;
-        const target = Math.min(total, HYDRATE_CAP);
-        if (target <= res.count) return;
-
-        setHydrating(true);
-        return fetchCandles(tf, { limit: target }).then((full) => {
-          if (cancelled) return;
-          setCandles(full.candles);
-        });
       })
       .catch((err) => {
         if (!cancelled) {
@@ -149,7 +165,6 @@ export default function App() {
       .finally(() => {
         if (!cancelled) {
           setLoading(false);
-          setHydrating(false);
         }
       });
 
@@ -157,7 +172,10 @@ export default function App() {
     fetchRange(tf)
       .then((range) => {
         if (cancelled) return;
-        if (range.start_unix != null) setHistoryMin(unixToLocalInput(range.start_unix));
+        if (range.start_unix != null) {
+          setHistoryMin(unixToLocalInput(range.start_unix));
+          setHistoryStartUnix(range.start_unix);
+        }
         if (range.end_unix != null) setHistoryMax(unixToLocalInput(range.end_unix));
         setHistoryCount(range.count || 0);
       })
@@ -204,6 +222,52 @@ export default function App() {
     return candles.slice(0, end + 1);
   }, [replayOn, candles, playhead, fromIdx, endIdx]);
 
+  const canLoadOlder =
+    !replayOn &&
+    !loading &&
+    historyStartUnix != null &&
+    candles.length > 0 &&
+    candles.length < CLIENT_MAX_BARS &&
+    candles[0].time > historyStartUnix;
+
+  const loadOlderBars = useCallback(async () => {
+    if (replayOn || loadingOlderRef.current) return;
+    const current = candlesRef.current;
+    if (!current.length) return;
+    if (historyStartUnix == null) return;
+    if (current[0].time <= historyStartUnix) return;
+    if (current.length >= CLIENT_MAX_BARS) return;
+
+    loadingOlderRef.current = true;
+
+    const beforeIso = new Date(current[0].time * 1000).toISOString();
+    const requestTf = tfRef.current;
+    try {
+      const res = await fetchCandles(requestTf, {
+        before: beforeIso,
+        limit: OLDER_CHUNK,
+      });
+      if (!res.candles.length) return;
+      if (requestTf !== tfRef.current) return;
+      setCandles((prev) => {
+        if (!prev.length) return prev;
+        if (prev[0].time !== current[0].time) return prev;
+        const cutoff = prev[0].time;
+        const older = res.candles.filter((c) => c.time < cutoff);
+        if (!older.length) return prev;
+        return older.concat(prev);
+      });
+      if (typeof res.total_available === "number" && res.total_available > 0) {
+        setHistoryCount(res.total_available);
+      }
+    } catch {
+      /* keep current window — user can pan again to retry */
+    } finally {
+      loadingOlderRef.current = false;
+
+    }
+  }, [replayOn, historyStartUnix]);
+
   // Auto-play tick
   useEffect(() => {
     if (!replayOn || !playing) return;
@@ -228,18 +292,10 @@ export default function App() {
     try {
       const res = await fetchCandles(tf, { limit: INITIAL_BARS });
       setCandles(res.candles);
-      const total = res.total_available ?? res.count;
-      const target = Math.min(total, HYDRATE_CAP);
-      if (target > res.count) {
-        setHydrating(true);
-        const full = await fetchCandles(tf, { limit: target });
-        setCandles(full.candles);
-      }
     } catch (err) {
       setError(String((err as Error).message || err));
     } finally {
       setLoading(false);
-      setHydrating(false);
     }
   };
 
@@ -315,20 +371,12 @@ export default function App() {
     });
   };
 
-  const chartBusy = loading || hydrating || replayLoading;
+  const chartBusy = loading || replayLoading;
   const chartBusyMsg = replayLoading
     ? "Loading replay period…"
-    : loading
-      ? `Loading ${tf}…`
-      : `Loading more ${tf} history…`;
+    : "Loading…";
 
-  const barLabel = chartBusy
-    ? `FinHub · ${tf}`
-    : replayOn
-      ? `Replay · ${visibleCandles.length.toLocaleString()} / ${candles.length.toLocaleString()}`
-      : historyCount > 0
-        ? `${candles.length.toLocaleString()} bars · ${tf} · ${historyCount.toLocaleString()} total`
-        : `${candles.length.toLocaleString()} bars · ${tf}`;
+
 
   const progressLabel =
     replayOn && candles[playhead]
@@ -339,11 +387,15 @@ export default function App() {
     <div className="app">
       <header className="topbar">
         <div className="brand">
-          <strong>FINHUBKH</strong>
-          <span>XAUUSD · FinHub</span>
+          <img src="/logo.png" alt="FinHubKh Logo" className="brand-logo" />
+          <div className="brand-text">
+            <strong>FINHUBKH</strong>
+          </div>
         </div>
 
         <div className="topbar-center">
+          <PairDropdown value={pair} onChange={setPair} />
+          <div style={{ width: 1, height: 20, background: "var(--border)", margin: "0 4px" }} />
           <div className="tf-row" role="toolbar" aria-label="Timeframes">
             {TFS.map((item) => {
               const meta = fileMap[item];
@@ -428,6 +480,19 @@ export default function App() {
               </svg>
             )}
           </button>
+          
+          <button
+            type="button"
+            className="theme-toggle"
+            title="Settings"
+            aria-label="Settings"
+            onClick={() => setSettingsOpen(true)}
+          >
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+              <circle cx="12" cy="12" r="3"></circle>
+              <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
+            </svg>
+          </button>
         </div>
 
         <div className="topbar-right">
@@ -449,9 +514,11 @@ export default function App() {
               onEditPeriod={() => openReplayPop(true)}
             />
           )}
-          <div className={`top-meta ${error ? "error" : ""}`}>
-            {error || `${barLabel} · drawings ${drawings.length}`}
-          </div>
+          {error && (
+            <div className="top-meta error">
+              {error}
+            </div>
+          )}
         </div>
       </header>
 
@@ -507,9 +574,19 @@ export default function App() {
             selectedId={selectedDrawingId}
             onSelectDrawing={setSelectedDrawingId}
             colorScheme={colorScheme}
+            canLoadOlder={canLoadOlder}
+            onNeedOlderBars={loadOlderBars}
+            settings={settings}
           />
         </div>
       </div>
+      
+      <SettingsModal
+        open={settingsOpen}
+        onClose={() => setSettingsOpen(false)}
+        settings={settings}
+        onChange={setSettings}
+      />
     </div>
   );
 }

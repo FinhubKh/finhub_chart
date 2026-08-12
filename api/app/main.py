@@ -77,11 +77,15 @@ def get_candles(
     tf: str = Query(..., description="Timeframe e.g. 15M"),
     start: str | None = None,
     end: str | None = None,
+    before: str | None = Query(
+        None,
+        description="ISO/unix-parseable time: return bars strictly older than this (scroll-left).",
+    ),
     limit: int | None = Query(
         None,
         ge=1,
         le=5_000_000,
-        description="Optional trailing cap when start/end are omitted.",
+        description="Trailing cap, or chunk size when `before` is set.",
     ),
     lookback: int = Query(
         0,
@@ -92,7 +96,12 @@ def get_candles(
 ):
     try:
         return candles_payload(
-            tf, start=start, end=end, limit=limit, lookback=lookback
+            tf,
+            start=start,
+            end=end,
+            limit=limit,
+            lookback=lookback,
+            before=before,
         )
     except FileNotFoundError as e:
         raise HTTPException(status_code=404, detail=str(e)) from e

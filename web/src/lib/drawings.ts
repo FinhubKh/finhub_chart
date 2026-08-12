@@ -82,6 +82,8 @@ export type Drawing =
       entry: Point;
       stop: number;
       take: number;
+      /** Box width in logical (bar) units from entry — drag right edge to resize */
+      widthLogical: number;
     }
   | {
       id: string;
@@ -216,4 +218,15 @@ export function isNavTool(tool: ToolId) {
 
 export function uid() {
   return `${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
+}
+
+/** Default Long/Short box width (~1 trading day on 1H). */
+export const DEFAULT_POSITION_WIDTH = 24;
+
+/** Resolve position box width (bars), with fallback for older drawings. */
+export function positionWidthLogical(d: {
+  widthLogical?: number;
+}): number {
+  const w = d.widthLogical ?? DEFAULT_POSITION_WIDTH;
+  return Number.isFinite(w) ? Math.max(2, w) : DEFAULT_POSITION_WIDTH;
 }

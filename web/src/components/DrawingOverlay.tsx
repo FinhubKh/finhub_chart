@@ -10,9 +10,11 @@ import {
   type Hit,
 } from "../lib/drawingEdit";
 import {
+  DEFAULT_POSITION_WIDTH,
   FIB_EXT_LEVELS,
   FIB_LEVELS,
   isNavTool,
+  positionWidthLogical,
   type Drawing,
   type Point,
   type ToolId,
@@ -239,7 +241,7 @@ export default function DrawingOverlay({
     ctx: CanvasRenderingContext2D,
     x: number,
     y: number,
-    color = "#2962ff"
+    color = "#007c90"
   ) => {
     ctx.beginPath();
     ctx.fillStyle = color;
@@ -263,10 +265,19 @@ export default function DrawingOverlay({
       const stopY = s.priceToCoordinate(d.stop);
       const takeY = s.priceToCoordinate(d.take);
       if (!entry || stopY == null || takeY == null) return;
-      const midX = Math.min(w - 8, entry.x + 100);
-      drawHandle(ctx, midX, entry.y, "#2962ff");
+      const end = toXY({
+        logical: d.entry.logical + positionWidthLogical(d),
+        price: d.entry.price,
+      });
+      const x0 = Math.min(entry.x, end?.x ?? entry.x + 80);
+      const x1 = Math.max(entry.x, end?.x ?? entry.x + 80);
+      const midX = (x0 + x1) / 2;
+      const midY = (Math.min(entry.y, stopY, takeY) + Math.max(entry.y, stopY, takeY)) / 2;
+      drawHandle(ctx, midX, entry.y, "#007c90");
       drawHandle(ctx, midX, stopY, "#f23645");
       drawHandle(ctx, midX, takeY, "#089981");
+      // Right-edge width handle
+      drawHandle(ctx, x1, midY, "#007c90");
       return;
     }
 
@@ -542,21 +553,45 @@ export default function DrawingOverlay({
         const pa = toXY(d.a);
         const pb = toXY(d.b);
         if (!pa || !pb) return;
+        
+        // Draw dashed diagonal trend line connecting the two anchor points
+        ctx.beginPath();
+        ctx.setLineDash([4, 4]);
+        ctx.strokeStyle = hexAlpha(d.color, 0.6);
+        ctx.lineWidth = 1;
+        ctx.moveTo(pa.x, pa.y);
+        ctx.lineTo(pb.x, pb.y);
+        ctx.stroke();
+        ctx.setLineDash([]); // reset dash
+
         const levels = d.type === "fib" ? FIB_LEVELS : FIB_EXT_LEVELS;
         const left = Math.min(pa.x, pb.x);
+        const right = Math.max(pa.x, pb.x);
         for (const lvl of levels) {
           const y = pa.y + (pb.y - pa.y) * lvl;
           const price = d.a.price + (d.b.price - d.a.price) * lvl;
+          
+          // Draw horizontal level line
           ctx.beginPath();
           ctx.strokeStyle = hexAlpha(d.color, 0.9);
           ctx.lineWidth = 1;
           ctx.moveTo(left, y);
-          ctx.lineTo(w - 8, y);
+          ctx.lineTo(right, y);
           ctx.stroke();
-          ctx.fillStyle = "#d1d4dc";
-          ctx.font = "10px Trebuchet MS, sans-serif";
-          ctx.fillText(`${lvl.toFixed(3)} (${price.toFixed(2)})`, left + 4, y - 3);
+
+          // Draw label: "0.236 (4,404.050)" placed to the left of the horizontal line
+          ctx.fillStyle = d.color;
+          ctx.font = "12px Trebuchet MS, sans-serif";
+          ctx.textAlign = "right";
+          ctx.textBaseline = "middle";
+          const lvlStr = lvl.toFixed(3).replace(/\.?0+$/, '');
+          const priceStr = price.toLocaleString(undefined, { minimumFractionDigits: 3, maximumFractionDigits: 3 });
+          ctx.fillText(`${lvlStr} (${priceStr})`, left - 6, y);
         }
+        
+        // Restore defaults for other drawings
+        ctx.textAlign = "left";
+        ctx.textBaseline = "alphabetic";
       } else if (d.type === "path" || d.type === "brush") {
         if (d.points.length < 2) return;
         ctx.beginPath();
@@ -612,22 +647,28 @@ export default function DrawingOverlay({
       entry: Point;
       stop: number;
       take: number;
+      widthLogical?: number;
     }) {
       const entry = toXY(d.entry);
       const stopY = seriesApi.priceToCoordinate(d.stop);
       const takeY = seriesApi.priceToCoordinate(d.take);
       if (!entry || stopY == null || takeY == null) return;
-      const x0 = entry.x;
-      const x1 = Math.min(w - 8, x0 + 200);
+      const end = toXY({
+        logical: d.entry.logical + positionWidthLogical(d),
+        price: d.entry.price,
+      });
+      const x0 = Math.min(entry.x, end?.x ?? entry.x + 80);
+      const x1 = Math.max(entry.x, end?.x ?? entry.x + 80);
+      const boxW = Math.max(4, x1 - x0);
       const riskTop = Math.min(entry.y, stopY);
       const riskH = Math.abs(stopY - entry.y);
       const rewardTop = Math.min(entry.y, takeY);
       const rewardH = Math.abs(takeY - entry.y);
 
       g.fillStyle = "rgba(242,54,69,0.22)";
-      g.fillRect(x0, riskTop, x1 - x0, riskH || 1);
+      g.fillRect(x0, riskTop, boxW, riskH || 1);
       g.fillStyle = "rgba(8,153,129,0.22)";
-      g.fillRect(x0, rewardTop, x1 - x0, rewardH || 1);
+      g.fillRect(x0, rewardTop, boxW, rewardH || 1);
 
       g.setLineDash([5, 3]);
       g.lineWidth = 1.5;
@@ -642,7 +683,7 @@ export default function DrawingOverlay({
       g.lineTo(x1, takeY);
       g.stroke();
       g.setLineDash([]);
-      g.strokeStyle = "#2962ff";
+      g.strokeStyle = "#007c90";
       g.lineWidth = 2;
       g.beginPath();
       g.moveTo(x0, entry.y);
@@ -672,7 +713,7 @@ export default function DrawingOverlay({
       g.font = "10px Trebuchet MS, sans-serif";
       g.fillStyle = "#089981";
       g.fillText("TP", x1 + 4, takeY + 3);
-      g.fillStyle = "#2962ff";
+      g.fillStyle = "#007c90";
       g.fillText("Entry", x1 + 4, entry.y + 3);
       g.fillStyle = "#f23645";
       g.fillText("SL", x1 + 4, stopY + 3);
@@ -725,6 +766,7 @@ export default function DrawingOverlay({
         entry: sess.entry,
         stop: sess.stop,
         take: sess.take,
+        widthLogical: DEFAULT_POSITION_WIDTH,
       });
       const ey = toXY(sess.entry);
       if (ey) {
@@ -1056,6 +1098,7 @@ export default function DrawingOverlay({
           entry: sess.entry,
           stop: sess.stop,
           take: sess.take,
+          widthLogical: DEFAULT_POSITION_WIDTH,
         };
         onChange((prev) => [...prev, position]);
         selectDrawing(position.id);

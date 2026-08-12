@@ -1,4 +1,5 @@
 export type ColorScheme = "dark" | "light";
+import type { ChartSettings } from "./settings";
 
 const STORAGE_KEY = "finhubkh-theme";
 
@@ -34,25 +35,25 @@ export function isCompactChartUi() {
 }
 
 /** Lightweight Charts layout colors for the active scheme. */
-export function chartThemeOptions(scheme: ColorScheme, compact = false) {
+export function chartThemeOptions(scheme: ColorScheme, settings: ChartSettings, compact = false) {
   const fontSize = compact ? 10 : 12;
   const priceMinWidth = compact ? 52 : 64;
 
   if (scheme === "light") {
     return {
       layout: {
-        background: { color: "#ffffff" },
+        background: { color: settings.bgLight },
         textColor: "#131722",
         fontSize,
       },
       grid: {
-        vertLines: { color: "#e0e3eb" },
-        horzLines: { color: "#e0e3eb" },
+        vertLines: { color: settings.showGrid !== false ? "#e0e3eb" : "transparent" },
+        horzLines: { color: settings.showGrid !== false ? "#e0e3eb" : "transparent" },
       },
       crosshair: {
         mode: 0 as const,
-        vertLine: { color: "#9598a1", labelBackgroundColor: "#2962ff" },
-        horzLine: { color: "#9598a1", labelBackgroundColor: "#2962ff" },
+        vertLine: { color: "#9598a1", labelBackgroundColor: "#007c90" },
+        horzLine: { color: "#9598a1", labelBackgroundColor: "#007c90" },
       },
       rightPriceScale: {
         borderColor: "#e0e3eb",
@@ -81,18 +82,18 @@ export function chartThemeOptions(scheme: ColorScheme, compact = false) {
 
   return {
     layout: {
-      background: { color: "#131722" },
+      background: { color: settings.bgDark },
       textColor: "#d1d4dc",
       fontSize,
     },
     grid: {
-      vertLines: { color: "#1e222d" },
-      horzLines: { color: "#1e222d" },
+      vertLines: { color: settings.showGrid !== false ? "#1e222d" : "transparent" },
+      horzLines: { color: settings.showGrid !== false ? "#1e222d" : "transparent" },
     },
     crosshair: {
       mode: 0 as const,
-      vertLine: { color: "#758696", labelBackgroundColor: "#2962ff" },
-      horzLine: { color: "#758696", labelBackgroundColor: "#2962ff" },
+      vertLine: { color: "#758696", labelBackgroundColor: "#007c90" },
+      horzLine: { color: "#758696", labelBackgroundColor: "#007c90" },
     },
     rightPriceScale: {
       borderColor: "#2a2e39",

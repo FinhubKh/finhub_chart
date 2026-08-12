@@ -7,6 +7,7 @@ import {
 } from "lightweight-charts";
 import type { Candle } from "../api";
 import {
+  calcBbma,
   calcBollinger,
   calcEma,
   calcMacd,
@@ -15,12 +16,14 @@ import {
   calcVwap,
   type IndicatorId,
 } from "../lib/indicators";
+import StructureOverlay from "./StructureOverlay";
 import { isNavTool, type Drawing, type ToolId } from "../lib/drawings";
 import {
   chartThemeOptions,
   isCompactChartUi,
   type ColorScheme,
 } from "../lib/theme";
+import type { ChartSettings } from "../lib/settings";
 
 /** Bars visible on first paint for phone — fitContent on 4k+ bars is unusable. */
 const MOBILE_VISIBLE_BARS = 120;
@@ -43,6 +46,11 @@ type Props = {
   selectedId: string | null;
   onSelectDrawing: (id: string | null) => void;
   colorScheme: ColorScheme;
+  /** True when older history exists beyond the leftmost loaded bar. */
+  canLoadOlder?: boolean;
+  /** Called when the user pans near the left edge — parent should prepend bars. */
+  onNeedOlderBars?: () => void;
+  settings: ChartSettings;
 };
 
 type LineSeries = ISeriesApi<"Line">;
@@ -64,6 +72,9 @@ export default function ChartPane({
   selectedId,
   onSelectDrawing,
   colorScheme,
+  canLoadOlder = false,
+  onNeedOlderBars,
+  settings,
 }: Props) {
   const mainRef = useRef<HTMLDivElement>(null);
   const rsiRef = useRef<HTMLDivElement>(null);
@@ -98,16 +109,16 @@ export default function ChartPane({
     if (!mainRef.current) return;
 
     const m = createChart(mainRef.current, {
-      ...chartThemeOptions(colorScheme, isCompactChartUi()),
+      ...chartThemeOptions(colorScheme, settings, isCompactChartUi()),
       width: mainRef.current.clientWidth,
       height: mainRef.current.clientHeight,
     });
     const c = m.addCandlestickSeries({
-      upColor: "#089981",
-      downColor: "#f23645",
+      upColor: settings.upColor,
+      downColor: settings.downColor,
       borderVisible: false,
-      wickUpColor: "#089981",
-      wickDownColor: "#f23645",
+      wickUpColor: settings.upColor,
+      wickDownColor: settings.downColor,
     });
 
     mainChart.current = m;
@@ -167,10 +178,16 @@ export default function ChartPane({
   // Keep chart chrome in sync with light/dark / compact without remounting
   useEffect(() => {
     const apply = () => {
-      const opts = chartThemeOptions(colorScheme, isCompactChartUi());
+      const opts = chartThemeOptions(colorScheme, settings, isCompactChartUi());
       mainChart.current?.applyOptions(opts);
       rsiChart.current?.applyOptions(opts);
       macdChart.current?.applyOptions(opts);
+      candleSeries.current?.applyOptions({
+        upColor: settings.upColor,
+        downColor: settings.downColor,
+        wickUpColor: settings.upColor,
+        wickDownColor: settings.downColor,
+      });
     };
     apply();
     const mq = window.matchMedia("(max-width: 768px)");
@@ -181,7 +198,7 @@ export default function ChartPane({
       mq.removeEventListener?.("change", onChange);
       window.removeEventListener("orientationchange", onChange);
     };
-  }, [colorScheme]);
+  }, [colorScheme, settings]);
 
   useEffect(() => {
     if (!showRsi) {
@@ -194,7 +211,7 @@ export default function ChartPane({
     }
     if (!rsiRef.current || rsiChart.current) return;
     const chart = createChart(rsiRef.current, {
-      ...chartThemeOptions(colorScheme, isCompactChartUi()),
+      ...chartThemeOptions(colorScheme, settings, isCompactChartUi()),
       width: rsiRef.current.clientWidth,
       height: rsiRef.current.clientHeight,
     });
@@ -229,7 +246,7 @@ export default function ChartPane({
     }
     if (!macdRef.current || macdChart.current) return;
     const chart = createChart(macdRef.current, {
-      ...chartThemeOptions(colorScheme, isCompactChartUi()),
+      ...chartThemeOptions(colorScheme, settings, isCompactChartUi()),
       width: macdRef.current.clientWidth,
       height: macdRef.current.clientHeight,
     });
@@ -294,7 +311,15 @@ export default function ChartPane({
     };
   }, [showRsi, showMacd, chartApi]);
 
-  const ensureLine = (key: string, opts: { color: string; lineWidth?: number }) => {
+  const ensureLine = (
+    key: string,
+    opts: {
+      color: string;
+      lineWidth?: number;
+      lastValueVisible?: boolean;
+      lineStyle?: number;
+    }
+  ) => {
     if (!mainChart.current) return null;
     let s = overlaySeries.current.get(key);
     if (!s) {
@@ -302,7 +327,8 @@ export default function ChartPane({
         color: opts.color,
         lineWidth: (opts.lineWidth ?? 2) as 1 | 2 | 3 | 4,
         priceLineVisible: false,
-        lastValueVisible: true,
+        lastValueVisible: opts.lastValueVisible ?? false,
+        lineStyle: opts.lineStyle,
       });
       overlaySeries.current.set(key, s);
     }
@@ -338,6 +364,100 @@ export default function ChartPane({
       }
     };
   }, [followLatest, chartApi]);
+
+  // Lazy-load older history when the user pans near the left edge
+  const canLoadOlderRef = useRef(canLoadOlder);
+  const onNeedOlderRef = useRef(onNeedOlderBars);
+  const userPannedRef = useRef(false);
+  const lastRangeFromRef = useRef<number | null>(null);
+  canLoadOlderRef.current = canLoadOlder;
+  onNeedOlderRef.current = onNeedOlderBars;
+
+  // Reset pan intent on a fresh series (TF change / reload), not on prepend
+  const seriesOriginRef = useRef<number | null>(null);
+  useEffect(() => {
+    const first = candles[0]?.time ?? null;
+    if (first == null) {
+      userPannedRef.current = false;
+      seriesOriginRef.current = null;
+      lastRangeFromRef.current = null;
+      return;
+    }
+    const prev = seriesOriginRef.current;
+    if (prev != null && first < prev) {
+      // History prepended — keep scroll-load intent
+      seriesOriginRef.current = first;
+      return;
+    }
+    if (prev !== first) {
+      userPannedRef.current = false;
+      seriesOriginRef.current = first;
+      lastRangeFromRef.current = null;
+    }
+  }, [candles]);
+
+  useEffect(() => {
+    // Listen on the wrap so DrawingOverlay / canvas still count as user pan
+    const el = mainRef.current?.parentElement ?? mainRef.current;
+    if (!el) return;
+    const mark = () => {
+      userPannedRef.current = true;
+    };
+    el.addEventListener("wheel", mark, { passive: true });
+    el.addEventListener("pointerdown", mark);
+    el.addEventListener("touchstart", mark, { passive: true });
+    return () => {
+      el.removeEventListener("wheel", mark);
+      el.removeEventListener("pointerdown", mark);
+      el.removeEventListener("touchstart", mark);
+    };
+  }, [chartApi]);
+
+  useEffect(() => {
+    const main = mainChart.current;
+    if (!main) return;
+
+    let lastFire = 0;
+    const maybeLoad = () => {
+      if (!canLoadOlderRef.current || !onNeedOlderRef.current) return;
+      const range = main.timeScale().getVisibleLogicalRange();
+      if (!range) return;
+
+      const prevFrom = lastRangeFromRef.current;
+      if (prevFrom != null && range.from < prevFrom - 1) {
+        // Visible window moved left → treat as user pan
+        userPannedRef.current = true;
+      }
+      lastRangeFromRef.current = range.from;
+
+      if (!userPannedRef.current) return;
+      // Near left edge of loaded series (logical index ~0)
+      if (range.from > 120) return;
+      const now = Date.now();
+      if (now - lastFire < 350) return;
+      lastFire = now;
+      onNeedOlderRef.current();
+    };
+
+    main.timeScale().subscribeVisibleLogicalRangeChange(maybeLoad);
+    return () => {
+      try {
+        main.timeScale().unsubscribeVisibleLogicalRangeChange(maybeLoad);
+      } catch {
+        /* ignore */
+      }
+    };
+  }, [chartApi]);
+
+  // Keep chaining chunks while still parked on the left after a prepend
+  useEffect(() => {
+    if (!userPannedRef.current) return;
+    if (!canLoadOlder || !onNeedOlderBars || !chartApi) return;
+    const range = chartApi.timeScale().getVisibleLogicalRange();
+    if (range && range.from <= 120) {
+      onNeedOlderBars();
+    }
+  }, [candles.length, canLoadOlder, onNeedOlderBars, chartApi]);
 
   // Candles — fit on reset; preserve viewport on history prepend / replay steps
   useEffect(() => {
@@ -448,39 +568,85 @@ export default function ChartPane({
       key: string,
       enabled: boolean,
       data: { time: number; value: number }[],
-      lineColor: string
+      lineColor: string,
+      opts?: { lineWidth?: number; lastValueVisible?: boolean; lineStyle?: number }
     ) => {
       if (!enabled) {
         removeLine(key);
         return;
       }
-      const s = ensureLine(key, { color: lineColor });
+      const s = ensureLine(key, {
+        color: lineColor,
+        lineWidth: opts?.lineWidth,
+        lastValueVisible: opts?.lastValueVisible,
+        lineStyle: opts?.lineStyle,
+      });
       s?.setData(
         data.map((p) => ({ time: p.time as UTCTimestamp, value: p.value }))
       );
     };
 
-    setOverlay("sma20", activeIndicators.has("sma20"), calcSma(candles, 20), "#fbbf24");
-    setOverlay("sma50", activeIndicators.has("sma50"), calcSma(candles, 50), "#38bdf8");
+    setOverlay("sma20", activeIndicators.has("sma20"), calcSma(candles, 20), "#fbbf24", {
+      lastValueVisible: true,
+    });
+    setOverlay("sma50", activeIndicators.has("sma50"), calcSma(candles, 50), "#38bdf8", {
+      lastValueVisible: true,
+    });
     setOverlay(
       "sma200",
       activeIndicators.has("sma200"),
       calcSma(candles, 200),
-      "#f472b6"
+      "#f472b6",
+      { lastValueVisible: true }
     );
-    setOverlay("ema21", activeIndicators.has("ema21"), calcEma(candles, 21), "#a78bfa");
-    setOverlay("vwap", activeIndicators.has("vwap"), calcVwap(candles), "#34d399");
+    setOverlay("ema21", activeIndicators.has("ema21"), calcEma(candles, 21), "#a78bfa", {
+      lastValueVisible: true,
+    });
+    setOverlay("vwap", activeIndicators.has("vwap"), calcVwap(candles), "#34d399", {
+      lastValueVisible: true,
+    });
 
-    if (activeIndicators.has("bbands")) {
+    if (activeIndicators.has("bbands") && !activeIndicators.has("bbma")) {
       const bb = calcBollinger(candles, 20, 2);
       setOverlay("bb_mid", true, bb.middle, "#94a3b8");
       setOverlay("bb_up", true, bb.upper, "#64748b");
       setOverlay("bb_lo", true, bb.lower, "#64748b");
-    } else {
+    } else if (!activeIndicators.has("bbma")) {
       removeLine("bb_mid");
       removeLine("bb_up");
       removeLine("bb_lo");
     }
+
+    // BBMA Oma Ally: BB + LWMA 5/10 High-Low + EMA 50
+    if (activeIndicators.has("bbma")) {
+      const pack = calcBbma(candles);
+      setOverlay("bbma_bb_mid", true, pack.bbMiddle, "#94a3b8", { lineWidth: 1 });
+      setOverlay("bbma_bb_up", true, pack.bbUpper, "#64748b", { lineWidth: 1 });
+      setOverlay("bbma_bb_lo", true, pack.bbLower, "#64748b", { lineWidth: 1 });
+      setOverlay("bbma_h5", true, pack.lwma5High, "#fb7185", { lineWidth: 2 });
+      setOverlay("bbma_h10", true, pack.lwma10High, "#f43f5e", { lineWidth: 1 });
+      setOverlay("bbma_l5", true, pack.lwma5Low, "#4ade80", { lineWidth: 2 });
+      setOverlay("bbma_l10", true, pack.lwma10Low, "#22c55e", { lineWidth: 1 });
+      setOverlay("bbma_ema50", true, pack.ema50, "#22d3ee", {
+        lineWidth: 2,
+        lastValueVisible: true,
+      });
+    } else {
+      for (const key of [
+        "bbma_bb_mid",
+        "bbma_bb_up",
+        "bbma_bb_lo",
+        "bbma_h5",
+        "bbma_h10",
+        "bbma_l5",
+        "bbma_l10",
+        "bbma_ema50",
+      ]) {
+        removeLine(key);
+      }
+    }
+
+    // Market structure drawn on StructureOverlay canvas (BOS / CHoCH lines)
 
     if (showRsi && rsiSeries.current) {
       rsiSeries.current.setData(
@@ -568,6 +734,12 @@ export default function ChartPane({
           onTool={onTool}
           selectedId={selectedId}
           onSelect={onSelectDrawing}
+        />
+        <StructureOverlay
+          chart={chartApi}
+          series={seriesApi}
+          candles={candles}
+          enabled={activeIndicators.has("structure")}
         />
       </div>
       {showRsi && (
