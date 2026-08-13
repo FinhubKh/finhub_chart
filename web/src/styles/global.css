@@ -77,6 +77,41 @@ select {
   overflow: hidden;
 }
 
+.brand-link {
+  display: flex;
+  align-items: center;
+  text-decoration: none;
+}
+
+.strategy-badge {
+  display: block;
+  margin-top: 0.1rem;
+  font-size: 0.72rem;
+  font-weight: 500;
+  color: var(--accent);
+  max-width: 160px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.strategy-badge.muted {
+  color: var(--muted);
+}
+
+.topbar-nav {
+  text-decoration: none;
+  font-size: 0.8rem;
+  padding: 0.35rem 0.55rem !important;
+  width: auto !important;
+  height: auto !important;
+}
+
+.theme-toggle.active {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
 .topbar {
   position: relative;
   z-index: 100;

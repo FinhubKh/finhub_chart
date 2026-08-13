@@ -64,6 +64,29 @@
   border: 1px solid rgba(242, 54, 69, 0.2);
 }
 
+.login-info {
+  background: rgba(8, 153, 129, 0.1);
+  color: var(--green);
+  padding: 0.75rem;
+  border-radius: 6px;
+  font-size: 0.85rem;
+  text-align: center;
+  border: 1px solid rgba(8, 153, 129, 0.25);
+}
+
+.login-button:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.register-link {
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  font: inherit;
+}
+
 .form-group {
   display: flex;
   flex-direction: column;

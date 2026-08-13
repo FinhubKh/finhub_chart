@@ -8,6 +8,9 @@ api/**/__pycache__/
 .DS_Store
 .env
 .env.*
+!.env.example
+!web/.env.example
+!**/.env.example
 data/xauusd/*.csv
 data/xauusd_free/
 data/xauusd_r2/

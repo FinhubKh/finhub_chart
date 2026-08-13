@@ -1,0 +1,150 @@
+.backtest-panel {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: min(320px, 92vw);
+  z-index: 40;
+  background: var(--bg-panel);
+  border-left: 1px solid var(--border);
+  padding: 0.85rem;
+  overflow: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 0.7rem;
+  box-shadow: var(--shadow);
+}
+
+.backtest-panel-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.backtest-close {
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--text);
+  border-radius: 6px;
+  padding: 0.3rem 0.55rem;
+  cursor: pointer;
+}
+
+.backtest-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  font-size: 0.8rem;
+  color: var(--muted);
+}
+
+.backtest-field input,
+.backtest-field select {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--text);
+  padding: 0.4rem 0.5rem;
+}
+
+.backtest-hint {
+  margin: 0;
+  font-size: 0.75rem;
+  color: var(--muted);
+  line-height: 1.4;
+}
+
+.backtest-error {
+  font-size: 0.8rem;
+  color: #f23645;
+  background: rgba(242, 54, 69, 0.08);
+  border: 1px solid rgba(242, 54, 69, 0.2);
+  border-radius: 6px;
+  padding: 0.5rem;
+}
+
+.backtest-actions {
+  display: flex;
+  gap: 0.45rem;
+}
+
+.backtest-actions .btn {
+  flex: 1;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  padding: 0.45rem 0.6rem;
+  cursor: pointer;
+  font-size: 0.85rem;
+  background: var(--bg-elevated);
+  color: var(--text);
+}
+
+.backtest-actions .btn.primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+
+.backtest-actions .btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.backtest-metrics {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.45rem;
+}
+
+.backtest-metrics div {
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 0.45rem 0.55rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+
+.backtest-metrics span {
+  font-size: 0.7rem;
+  color: var(--muted);
+}
+
+.backtest-metrics strong {
+  font-size: 0.9rem;
+}
+
+.backtest-runs h4 {
+  margin: 0.35rem 0 0.4rem;
+  font-size: 0.85rem;
+}
+
+.backtest-runs ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+}
+
+.backtest-runs li {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 0.45rem 0.55rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  font-size: 0.75rem;
+  color: var(--muted);
+}
+
+.backtest-runs li strong {
+  color: var(--text);
+  font-size: 0.8rem;
+}
+
+.chart-column {
+  position: relative;
+}

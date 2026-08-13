@@ -1,24 +1,50 @@
 import React, { useState } from "react";
+import { Navigate, useLocation, useNavigate } from "react-router-dom";
+import { useAuth } from "../lib/auth";
 import "./LoginPage.css";
 
-type Props = {
-  onLogin: () => void;
-};
+export default function LoginPage() {
+  const { user, ready, configured, signIn, signUp } = useAuth();
+  const navigate = useNavigate();
+  const location = useLocation();
+  const from =
+    (location.state as { from?: string } | null)?.from || "/strategies";
 
-export default function LoginPage({ onLogin }: Props) {
-  const [email, setEmail] = useState("test@finhubkh.com");
-  const [password, setPassword] = useState("password123");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [mode, setMode] = useState<"signin" | "signup">("signin");
   const [error, setError] = useState("");
+  const [info, setInfo] = useState("");
+  const [busy, setBusy] = useState(false);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  if (ready && user) {
+    return <Navigate to={from} replace />;
+  }
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
-    // Placeholder logic for authentication
-    // TODO: Connect this to the actual backend API to verify credentials
-    if (email.trim() && password.trim()) {
-      onLogin();
-    } else {
+    setError("");
+    setInfo("");
+    if (!email.trim() || !password.trim()) {
       setError("Please enter your email and password.");
+      return;
+    }
+    setBusy(true);
+    try {
+      if (mode === "signin") {
+        await signIn(email.trim(), password);
+        navigate(from, { replace: true });
+      } else {
+        await signUp(email.trim(), password);
+        setInfo(
+          "Account created. If email confirmation is enabled in Supabase, check your inbox; otherwise you can sign in now."
+        );
+        setMode("signin");
+      }
+    } catch (err) {
+      setError(String((err as Error).message || err));
+    } finally {
+      setBusy(false);
     }
   };
 
@@ -28,12 +54,20 @@ export default function LoginPage({ onLogin }: Props) {
         <div className="login-header">
           <img src="/logo.png" alt="FinHubKh Logo" className="login-logo" />
           <h2>Welcome to FinHubKh</h2>
-          <p>Sign in with your FinHub member account to access advanced charts.</p>
+          <p>Sign in to manage strategies, drawings, and backtests.</p>
         </div>
 
-        <form className="login-form" onSubmit={handleSubmit}>
+        {!configured && (
+          <div className="login-error">
+            Supabase keys are missing. Add <code>VITE_SUPABASE_URL</code> and{" "}
+            <code>VITE_SUPABASE_ANON_KEY</code> to <code>web/.env.local</code>.
+          </div>
+        )}
+
+        <form className="login-form" onSubmit={(e) => void handleSubmit(e)}>
           {error && <div className="login-error">{error}</div>}
-          
+          {info && <div className="login-info">{info}</div>}
+
           <div className="form-group">
             <label htmlFor="email">Email Address</label>
             <input
@@ -43,6 +77,7 @@ export default function LoginPage({ onLogin }: Props) {
               onChange={(e) => setEmail(e.target.value)}
               placeholder="member@finhubkh.com"
               required
+              autoComplete="email"
             />
           </div>
 
@@ -55,24 +90,32 @@ export default function LoginPage({ onLogin }: Props) {
               onChange={(e) => setPassword(e.target.value)}
               placeholder="••••••••"
               required
+              autoComplete={mode === "signin" ? "current-password" : "new-password"}
+              minLength={6}
             />
           </div>
 
-          <button type="submit" className="login-button">
-            Login
+          <button type="submit" className="login-button" disabled={busy || !configured}>
+            {busy ? "Please wait…" : mode === "signin" ? "Sign in" : "Create account"}
           </button>
         </form>
 
         <div className="login-footer">
-          <p>Don't have an account?</p>
-          <a
-            href="https://www.finhubkh.com/en/register"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="register-link"
-          >
-            Register as a FinHub member here
-          </a>
+          {mode === "signin" ? (
+            <p>
+              No account?{" "}
+              <button type="button" className="register-link" onClick={() => setMode("signup")}>
+                Create one
+              </button>
+            </p>
+          ) : (
+            <p>
+              Already registered?{" "}
+              <button type="button" className="register-link" onClick={() => setMode("signin")}>
+                Sign in
+              </button>
+            </p>
+          )}
         </div>
       </div>
     </div>

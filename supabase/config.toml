@@ -1,0 +1,7 @@
+# Minimal config — link a project later with:
+#   supabase link --project-ref YOUR_REF
+# then apply:
+#   supabase db push
+# or paste supabase/migrations/001_strategies.sql in the SQL editor.
+
+project_id = "finhubkh-chart"
