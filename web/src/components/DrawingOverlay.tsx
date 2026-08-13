@@ -1,6 +1,6 @@
 import { useEffect, useRef } from "react";
 import type { IChartApi, ISeriesApi } from "lightweight-charts";
-import type { Candle } from "../api";
+import type { Candle } from "../lib/api";
 import { pointToScreen, screenToPoint, timeForCrosshair } from "../lib/coords";
 import {
   applyEdit,

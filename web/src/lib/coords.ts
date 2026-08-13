@@ -1,5 +1,5 @@
 import type { IChartApi, ISeriesApi, Logical, UTCTimestamp } from "lightweight-charts";
-import type { Candle } from "../api";
+import type { Candle } from "./api";
 import type { Point } from "./drawings";
 
 function clampIndex(i: number, len: number) {

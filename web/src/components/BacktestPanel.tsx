@@ -4,10 +4,10 @@ import {
   runBacktest,
   type BacktestResult,
   type StrategyInfo,
-} from "../api";
+} from "../lib/api";
 import type { BacktestRunRow } from "../lib/database.types";
 import { listBacktestRuns, saveBacktestRun } from "../lib/strategiesApi";
-import "./BacktestPanel.css";
+import "../styles/components/backtest-panel.css";
 
 type Props = {
   open: boolean;
@@ -142,7 +142,7 @@ export default function BacktestPanel({
     <aside className="backtest-panel" aria-label="Backtest">
       <div className="backtest-panel-head">
         <strong>Backtest</strong>
-        <button type="button" className="backtest-close" onClick={onClose}>
+        <button type="button" className="fh-btn subtle" onClick={onClose}>
           Close
         </button>
       </div>
@@ -180,12 +180,17 @@ export default function BacktestPanel({
       {error && <div className="backtest-error">{error}</div>}
 
       <div className="backtest-actions">
-        <button type="button" className="btn primary" disabled={running} onClick={() => void onRun()}>
+        <button
+          type="button"
+          className="fh-btn primary"
+          disabled={running}
+          onClick={() => void onRun()}
+        >
           {running ? "Running…" : "Run"}
         </button>
         <button
           type="button"
-          className="btn ghost"
+          className="fh-btn"
           disabled={!result || saving}
           onClick={() => void onSave()}
         >

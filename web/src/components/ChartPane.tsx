@@ -1,12 +1,12 @@
 import { useEffect, useRef, useState } from "react";
-import "./ChartPane.css";
+import "../styles/components/chart-pane.css";
 import {
   createChart,
   type IChartApi,
   type ISeriesApi,
   type UTCTimestamp,
 } from "lightweight-charts";
-import type { Candle } from "../api";
+import type { Candle } from "../lib/api";
 import {
   calcBbma,
   calcBollinger,

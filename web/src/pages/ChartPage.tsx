@@ -12,7 +12,7 @@ import {
   fetchTimeframes,
   type Candle,
   type TimeframeFile,
-} from "../api";
+} from "../lib/api";
 import type { Drawing, ToolId } from "../lib/drawings";
 import type { IndicatorId } from "../lib/indicators";
 import {
@@ -508,17 +508,30 @@ export default function ChartPage() {
             <strong>FINHUBKH</strong>
             {strategy ? (
               <span className="strategy-badge" title={strategy.name}>
-                {strategy.name}
-                {drawSaveState === "saving"
-                  ? " · saving…"
-                  : drawSaveState === "saved"
-                    ? " · saved"
-                    : drawSaveState === "error"
-                      ? " · save failed"
-                      : ""}
+                <strong>{strategy.name}</strong>
+                <span
+                  className={`save-dot ${
+                    drawSaveState === "saving"
+                      ? "saving"
+                      : drawSaveState === "saved"
+                        ? "saved"
+                        : drawSaveState === "error"
+                          ? "error"
+                          : ""
+                  }`}
+                  title={
+                    drawSaveState === "saving"
+                      ? "Saving drawings…"
+                      : drawSaveState === "saved"
+                        ? "Drawings saved"
+                        : drawSaveState === "error"
+                          ? "Save failed"
+                          : "Ready"
+                  }
+                />
               </span>
             ) : (
-              <span className="strategy-badge muted">Scratch chart</span>
+              <span className="strategy-badge">Scratch chart</span>
             )}
           </div>
         </div>
@@ -548,13 +561,13 @@ export default function ChartPage() {
         </div>
 
         <div className="topbar-actions">
-          <Link className="theme-toggle topbar-nav" to="/strategies" title="Strategies">
+          <Link className="fh-btn subtle" to="/strategies" title="Strategies">
             Strategies
           </Link>
           {strategyId ? (
             <button
               type="button"
-              className={`theme-toggle ${backtestOpen ? "active" : ""}`}
+              className={`fh-btn ${backtestOpen ? "primary" : "subtle"}`}
               title="Backtest"
               onClick={() => setBacktestOpen((v) => !v)}
             >
@@ -563,7 +576,7 @@ export default function ChartPage() {
           ) : drawings.length > 0 ? (
             <button
               type="button"
-              className="theme-toggle"
+              className="fh-btn subtle"
               title="Save drawings as a strategy"
               onClick={() => {
                 setSaveAsName("");
@@ -732,20 +745,22 @@ export default function ChartPage() {
 
       {saveAsOpen && (
         <div
-          className="strategies-modal-backdrop"
+          className="fh-modal-backdrop"
           role="presentation"
           onClick={() => setSaveAsOpen(false)}
         >
           <div
-            className="strategies-modal"
+            className="fh-modal"
             role="dialog"
             aria-modal="true"
             onClick={(e) => e.stopPropagation()}
           >
-            <h2>Save as strategy</h2>
-            <form onSubmit={(e) => void onSaveAsStrategy(e)}>
+            <div className="fh-modal-head">
+              <h2>Save as strategy</h2>
+            </div>
+            <form className="fh-form" onSubmit={(e) => void onSaveAsStrategy(e)}>
               <label>
-                Name
+                <span>Name</span>
                 <input
                   value={saveAsName}
                   onChange={(e) => setSaveAsName(e.target.value)}
@@ -754,13 +769,13 @@ export default function ChartPage() {
                   autoFocus
                 />
               </label>
-              <div className="strategies-modal-actions">
-                <button type="button" className="btn ghost" onClick={() => setSaveAsOpen(false)}>
+              <div className="fh-modal-actions">
+                <button type="button" className="fh-btn" onClick={() => setSaveAsOpen(false)}>
                   Cancel
                 </button>
                 <button
                   type="submit"
-                  className="btn primary"
+                  className="fh-btn primary"
                   disabled={saveAsBusy || !saveAsName.trim()}
                 >
                   {saveAsBusy ? "Saving…" : "Save"}

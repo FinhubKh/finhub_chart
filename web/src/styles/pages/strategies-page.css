@@ -1,0 +1,236 @@
+.strategies-page {
+  min-height: 100%;
+  height: var(--app-height, 100dvh);
+  display: flex;
+  flex-direction: column;
+  background: var(--bg);
+  color: var(--text);
+  overflow: auto;
+}
+
+.strategies-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.7rem 1.15rem;
+  padding-left: max(1.15rem, env(safe-area-inset-left));
+  padding-right: max(1.15rem, env(safe-area-inset-right));
+  border-bottom: 1px solid var(--border);
+  background: var(--bg);
+  position: sticky;
+  top: 0;
+  z-index: 20;
+}
+
+.strategies-brand {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  min-width: 0;
+}
+
+.strategies-brand img {
+  height: 30px;
+  width: auto;
+}
+
+.strategies-brand strong {
+  display: block;
+  font-size: 0.95rem;
+  letter-spacing: 0.04em;
+  font-weight: 700;
+}
+
+.strategies-brand span {
+  display: block;
+  font-size: 0.72rem;
+  color: var(--muted);
+  margin-top: 0.05rem;
+}
+
+.strategies-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.strategies-user {
+  font-size: 0.75rem;
+  color: var(--muted);
+  max-width: 180px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  margin-right: 0.25rem;
+}
+
+.strategies-main {
+  width: min(1080px, 100%);
+  margin: 0 auto;
+  padding: 1.35rem 1.15rem 3rem;
+}
+
+.strategies-toolbar {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 1rem;
+  flex-wrap: wrap;
+}
+
+.strategies-toolbar h1 {
+  margin: 0;
+  font-size: 1.35rem;
+  font-weight: 650;
+  letter-spacing: -0.01em;
+}
+
+.strategies-toolbar p {
+  margin: 0.3rem 0 0;
+  color: var(--muted);
+  font-size: 0.88rem;
+  line-height: 1.4;
+  max-width: 42rem;
+}
+
+.strategies-search {
+  width: min(260px, 100%);
+  background: var(--bg-input);
+  border: 1px solid var(--border);
+  color: var(--text);
+  border-radius: 6px;
+  padding: 0.5rem 0.7rem;
+  font-size: 0.85rem;
+  outline: none;
+}
+
+.strategies-search:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px rgba(0, 124, 144, 0.18);
+}
+
+.strategies-panel {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--bg-elevated);
+  overflow: hidden;
+}
+
+.strategies-panel-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.65rem 0.85rem;
+  border-bottom: 1px solid var(--border);
+  font-size: 0.78rem;
+  color: var(--muted);
+  background: color-mix(in srgb, var(--bg) 70%, var(--bg-elevated));
+}
+
+.strategies-state {
+  padding: 2.5rem 1.25rem;
+  text-align: center;
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
+.strategies-state.empty strong {
+  display: block;
+  color: var(--text);
+  font-size: 1rem;
+  margin-bottom: 0.35rem;
+}
+
+.strategies-state.empty p {
+  margin: 0 auto 1rem;
+  max-width: 28rem;
+  line-height: 1.45;
+}
+
+.strategies-state-actions {
+  display: flex;
+  justify-content: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.strategies-table-wrap {
+  overflow-x: auto;
+}
+
+.strategies-table {
+  width: 100%;
+  border-collapse: collapse;
+  min-width: 680px;
+}
+
+.strategies-table th,
+.strategies-table td {
+  padding: 0.75rem 0.85rem;
+  text-align: left;
+  border-bottom: 1px solid var(--border);
+  font-size: 0.85rem;
+  vertical-align: middle;
+}
+
+.strategies-table th {
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--muted);
+  background: transparent;
+}
+
+.strategies-table tbody tr:hover {
+  background: color-mix(in srgb, var(--hover) 65%, transparent);
+}
+
+.strategies-table tbody tr:last-child td {
+  border-bottom: 0;
+}
+
+.strategies-table .muted {
+  color: var(--muted);
+}
+
+.strategies-name-btn {
+  border: 0;
+  background: none;
+  color: var(--text);
+  font-weight: 600;
+  font-size: 0.9rem;
+  padding: 0;
+  cursor: pointer;
+  text-align: left;
+}
+
+.strategies-name-btn:hover {
+  color: var(--accent);
+}
+
+.strategies-row-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.35rem;
+  white-space: nowrap;
+}
+
+@media (max-width: 720px) {
+  .strategies-user {
+    display: none;
+  }
+
+  .strategies-toolbar {
+    align-items: stretch;
+  }
+
+  .strategies-search {
+    width: 100%;
+  }
+}

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import "./Toolbar.css";
+import "../styles/components/toolbar.css";
 import {
   TOOLBAR_SLOTS,
   type ToolId,

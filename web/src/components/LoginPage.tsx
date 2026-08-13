@@ -1,7 +1,7 @@
 import React, { useState } from "react";
 import { Navigate, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "../lib/auth";
-import "./LoginPage.css";
+import "../styles/components/login-page.css";
 
 export default function LoginPage() {
   const { user, ready, configured, signIn, signUp } = useAuth();
@@ -53,8 +53,8 @@ export default function LoginPage() {
       <div className="login-card">
         <div className="login-header">
           <img src="/logo.png" alt="FinHubKh Logo" className="login-logo" />
-          <h2>Welcome to FinHubKh</h2>
-          <p>Sign in to manage strategies, drawings, and backtests.</p>
+          <h2>Sign in</h2>
+          <p>Access your strategies, drawings, and backtests.</p>
         </div>
 
         {!configured && (

@@ -1,4 +1,4 @@
-import type { Candle } from "../api";
+import type { Candle } from "./api";
 
 export type LinePoint = { time: number; value: number };
 
