@@ -122,27 +122,10 @@ def load_ohlc(
 
 
 def candles_range(tf: str) -> dict:
-    """Full dataset bounds for a timeframe (uses in-memory/R2 cache)."""
-    df = _load_df(tf)
-    if df.empty:
-        return {
-            "tf": tf.upper(),
-            "count": 0,
-            "start": None,
-            "end": None,
-            "start_unix": None,
-            "end_unix": None,
-        }
-    start_ts = df["datetime"].iloc[0]
-    end_ts = df["datetime"].iloc[-1]
-    return {
-        "tf": tf.upper(),
-        "count": int(len(df)),
-        "start": start_ts.isoformat(),
-        "end": end_ts.isoformat(),
-        "start_unix": int(start_ts.timestamp()),
-        "end_unix": int(end_ts.timestamp()),
-    }
+    """Full dataset bounds for a timeframe (cheap on R2 — no full CSV load)."""
+    from .storage import finhub_bounds
+
+    return finhub_bounds(tf)
 
 
 def candles_payload(
@@ -161,35 +144,21 @@ def candles_payload(
       (scroll-left history pagination).
     - `start`/`end`: explicit window (+ optional `lookback` before `start`).
     """
-    df_full = _load_df(tf)
-    if df_full.empty:
-        return {
-            "tf": tf.upper(),
-            "count": 0,
-            "candles": [],
-            "total_available": 0,
-            "replay_from_index": 0,
-            "has_more": False,
-        }
+    # —— Fast path: recent window only (chart first paint) ——
+    # Avoid downloading the entire R2 CSV when the UI only needs the last N bars.
+    if before is None and start is None and end is None and limit is not None and limit > 0:
+        from .storage import load_finhub_tail
 
-    # —— Scroll-left pagination: N bars ending just before `before` ——
-    if before is not None and start is None and end is None:
-        before_ts = pd.to_datetime(before, utc=True)
-        older = df_full[df_full["datetime"] < before_ts]
-        total_available = int(len(df_full))
-        if older.empty:
+        df, total_available, has_more = load_finhub_tail(tf, int(limit))
+        if df.empty:
             return {
                 "tf": tf.upper(),
                 "count": 0,
                 "candles": [],
-                "total_available": total_available,
+                "total_available": 0,
                 "replay_from_index": 0,
                 "has_more": False,
             }
-        lim = int(limit) if limit is not None and limit > 0 else 4_000
-        chunk = older.iloc[-lim:] if len(older) > lim else older
-        has_more = bool(len(older) > len(chunk))
-        df = chunk.reset_index(drop=True)
         times = (df["datetime"].astype("int64") // 1_000_000_000).to_numpy()
         opens = df["open"].to_numpy(dtype=float)
         highs = df["high"].to_numpy(dtype=float)
@@ -211,9 +180,62 @@ def candles_payload(
             "tf": tf.upper(),
             "count": len(candles),
             "candles": candles,
-            "total_available": total_available,
+            "total_available": int(total_available),
             "replay_from_index": 0,
-            "has_more": has_more,
+            "has_more": bool(has_more),
+        }
+
+    # —— Scroll-left pagination: N bars ending just before `before` ——
+    if before is not None and start is None and end is None:
+        from .storage import load_finhub_before
+
+        lim = int(limit) if limit is not None and limit > 0 else 4_000
+        df, total_available, has_more = load_finhub_before(tf, before, lim)
+        if df.empty:
+            return {
+                "tf": tf.upper(),
+                "count": 0,
+                "candles": [],
+                "total_available": int(total_available),
+                "replay_from_index": 0,
+                "has_more": False,
+            }
+        times = (df["datetime"].astype("int64") // 1_000_000_000).to_numpy()
+        opens = df["open"].to_numpy(dtype=float)
+        highs = df["high"].to_numpy(dtype=float)
+        lows = df["low"].to_numpy(dtype=float)
+        closes = df["close"].to_numpy(dtype=float)
+        volumes = df["volume"].to_numpy(dtype=float)
+        candles = [
+            {
+                "time": int(times[i]),
+                "open": float(opens[i]),
+                "high": float(highs[i]),
+                "low": float(lows[i]),
+                "close": float(closes[i]),
+                "volume": float(volumes[i]),
+            }
+            for i in range(len(df))
+        ]
+        return {
+            "tf": tf.upper(),
+            "count": len(candles),
+            "candles": candles,
+            "total_available": int(total_available),
+            "replay_from_index": 0,
+            "has_more": bool(has_more),
+        }
+
+    # Explicit start/end (replay) still needs the full frame
+    df_full = _load_df(tf)
+    if df_full.empty:
+        return {
+            "tf": tf.upper(),
+            "count": 0,
+            "candles": [],
+            "total_available": 0,
+            "replay_from_index": 0,
+            "has_more": False,
         }
 
     begin = 0

@@ -1,0 +1,13 @@
+node_modules
+web/node_modules
+**/node_modules
+.git
+.qodo
+data
+download
+.cache
+.env
+.env.*
+api/.venv
+**/*.csv
+.DS_Store

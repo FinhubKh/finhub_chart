@@ -1,3 +1,5 @@
+# Prefer Cloud Run (GCP). Keep this file only as a fallback reference for Render.
+# Auto-deploy should be disabled on Render once GCP is primary.
 services:
   - type: web
     name: finhub-chart-api
@@ -8,7 +10,7 @@ services:
     dockerContext: .
     healthCheckPath: /api/health
     branch: main
-    autoDeploy: true
+    autoDeploy: false
     buildFilter:
       paths:
         - api/**
@@ -21,7 +23,7 @@ services:
       - key: R2_PREFIX
         value: xauusd
       - key: CORS_ORIGINS
-        value: https://finhub-chart.vercel.app
+        value: https://finhub-chart.vercel.app,https://chart.finhubkh.com
       - key: APP_ROOT
         value: /app
       - key: R2_ACCOUNT_ID

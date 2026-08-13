@@ -122,6 +122,7 @@ export default function App() {
   const [historyMax, setHistoryMax] = useState("");
   const [historyCount, setHistoryCount] = useState(0);
   const [historyStartUnix, setHistoryStartUnix] = useState<number | null>(null);
+  const [serverHasMore, setServerHasMore] = useState(false);
 
   const loadingOlderRef = useRef(false);
   const candlesRef = useRef<Candle[]>([]);
@@ -159,13 +160,19 @@ export default function App() {
     setHistoryMax("");
     setHistoryCount(0);
     setHistoryStartUnix(null);
+    setServerHasMore(false);
 
     loadingOlderRef.current = false;
 
+    // Chart first — do not wait on history bounds.
     fetchCandles(tf, { limit: INITIAL_BARS })
       .then((res) => {
         if (cancelled) return;
         setCandles(res.candles);
+        setServerHasMore(Boolean(res.has_more));
+        if (typeof res.total_available === "number" && res.total_available > 0) {
+          setHistoryCount(res.total_available);
+        }
       })
       .catch((err) => {
         if (!cancelled) {
@@ -179,7 +186,7 @@ export default function App() {
         }
       });
 
-    // Full history bounds for replay (may load TF into API RAM once)
+    // Cheap bounds for replay picker / older-scroll (R2 byte-range only).
     fetchRange(tf)
       .then((range) => {
         if (cancelled) return;
@@ -188,7 +195,7 @@ export default function App() {
           setHistoryStartUnix(range.start_unix);
         }
         if (range.end_unix != null) setHistoryMax(unixToLocalInput(range.end_unix));
-        setHistoryCount(range.count || 0);
+        if (range.count) setHistoryCount(range.count);
       })
       .catch(() => {
         /* picker falls back to loaded candles */
@@ -236,17 +243,16 @@ export default function App() {
   const canLoadOlder =
     !replayOn &&
     !loading &&
-    historyStartUnix != null &&
     candles.length > 0 &&
     candles.length < CLIENT_MAX_BARS &&
-    candles[0].time > historyStartUnix;
+    (serverHasMore ||
+      (historyStartUnix != null && candles[0].time > historyStartUnix));
 
   const loadOlderBars = useCallback(async () => {
     if (replayOn || loadingOlderRef.current) return;
     const current = candlesRef.current;
     if (!current.length) return;
-    if (historyStartUnix == null) return;
-    if (current[0].time <= historyStartUnix) return;
+    if (historyStartUnix != null && current[0].time <= historyStartUnix) return;
     if (current.length >= CLIENT_MAX_BARS) return;
 
     loadingOlderRef.current = true;
@@ -258,7 +264,10 @@ export default function App() {
         before: beforeIso,
         limit: OLDER_CHUNK,
       });
-      if (!res.candles.length) return;
+      if (!res.candles.length) {
+        setServerHasMore(false);
+        return;
+      }
       if (requestTf !== tfRef.current) return;
       setCandles((prev) => {
         if (!prev.length) return prev;
@@ -268,6 +277,7 @@ export default function App() {
         if (!older.length) return prev;
         return older.concat(prev);
       });
+      setServerHasMore(Boolean(res.has_more));
       if (typeof res.total_available === "number" && res.total_available > 0) {
         setHistoryCount(res.total_available);
       }
@@ -275,7 +285,6 @@ export default function App() {
       /* keep current window — user can pan again to retry */
     } finally {
       loadingOlderRef.current = false;
-
     }
   }, [replayOn, historyStartUnix]);
 

@@ -4,6 +4,7 @@ import os
 
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.middleware.gzip import GZipMiddleware
 from pydantic import BaseModel, Field
 
 from .backtester import result_to_dict, run_backtest
@@ -19,6 +20,7 @@ _cors = [
     if o.strip()
 ]
 
+app.add_middleware(GZipMiddleware, minimum_size=1000)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=_cors or ["*"],

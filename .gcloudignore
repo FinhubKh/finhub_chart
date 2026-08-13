@@ -1,0 +1,13 @@
+.git
+.github
+.qodo
+node_modules
+web/node_modules
+web/dist
+data
+.env
+.DS_Store
+**/*.md
+**/__pycache__
+**/.venv
+**/venv
