@@ -11,14 +11,18 @@
   --hover: #2a2e39;
   --hover-text: #ffffff;
   --accent: #007c90;
+  --accent-soft: color-mix(in srgb, var(--accent) 16%, transparent);
   --green: #089981;
   --red: #f23645;
   --font: "Trebuchet MS", "Segoe UI", sans-serif;
   --mono: "Trebuchet MS", monospace;
   --tv-blue: #007c90;
   --shadow: 0 12px 32px rgba(0, 0, 0, 0.5);
+  --shadow-sm: 0 1px 0 rgba(255, 255, 255, 0.03), 0 8px 18px rgba(0, 0, 0, 0.28);
   --play-bg: #003e48;
   --play-border: #007c90;
+  --card-bg: #1e222d;
+  --page-canvas: #131722;
 }
 
 [data-theme="light"] {
@@ -33,12 +37,16 @@
   --hover: #e0e3eb;
   --hover-text: #131722;
   --accent: #007c90;
+  --accent-soft: color-mix(in srgb, var(--accent) 12%, transparent);
   --green: #089981;
   --red: #f23645;
   --tv-blue: #007c90;
   --shadow: 0 12px 32px rgba(19, 23, 34, 0.12);
+  --shadow-sm: 0 1px 2px rgba(19, 23, 34, 0.04), 0 8px 20px rgba(19, 23, 34, 0.06);
   --play-bg: #e0f2f5;
   --play-border: #007c90;
+  --card-bg: #ffffff;
+  --page-canvas: #f0f3fa;
 }
 
 * {
@@ -185,6 +193,16 @@ select {
   background: rgba(242, 54, 69, 0.08);
 }
 
+.fh-btn.danger {
+  background: var(--red);
+  border-color: var(--red);
+  color: #fff;
+}
+
+.fh-btn.danger:hover {
+  filter: brightness(1.06);
+}
+
 .fh-btn:disabled {
   opacity: 0.5;
   cursor: not-allowed;
@@ -306,6 +324,18 @@ select {
   justify-content: flex-end;
   gap: 0.45rem;
   margin-top: 0.25rem;
+}
+
+.fh-modal-copy {
+  margin: 0 0 1rem;
+  font-size: 0.88rem;
+  line-height: 1.5;
+  color: var(--muted);
+}
+
+.fh-modal-copy strong {
+  color: var(--text);
+  font-weight: 650;
 }
 
 .auth-boot {

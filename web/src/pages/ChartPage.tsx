@@ -5,7 +5,6 @@ import IndicatorPanel from "../components/IndicatorPanel";
 import ReplayBar, { ReplayPeriodPop } from "../components/ReplayBar";
 import Toolbar from "../components/Toolbar";
 import PairDropdown from "../components/PairDropdown";
-import BacktestPanel from "../components/BacktestPanel";
 import {
   fetchCandles,
   fetchRange,
@@ -83,7 +82,6 @@ export default function ChartPage() {
   const [drawSaveState, setDrawSaveState] = useState<"idle" | "saving" | "saved" | "error">(
     "idle"
   );
-  const [backtestOpen, setBacktestOpen] = useState(false);
   const [saveAsOpen, setSaveAsOpen] = useState(false);
   const [saveAsName, setSaveAsName] = useState("");
   const [saveAsBusy, setSaveAsBusy] = useState(false);
@@ -130,7 +128,6 @@ export default function ChartPage() {
       setStrategy(null);
       setStrategyLoading(false);
       setDrawings([]);
-      setBacktestOpen(false);
       return;
     }
 
@@ -564,16 +561,7 @@ export default function ChartPage() {
           <Link className="fh-btn subtle" to="/strategies" title="Strategies">
             Strategies
           </Link>
-          {strategyId ? (
-            <button
-              type="button"
-              className={`fh-btn ${backtestOpen ? "primary" : "subtle"}`}
-              title="Backtest"
-              onClick={() => setBacktestOpen((v) => !v)}
-            >
-              Backtest
-            </button>
-          ) : drawings.length > 0 ? (
+          {!strategyId && drawings.length > 0 ? (
             <button
               type="button"
               className="fh-btn subtle"
@@ -720,19 +708,6 @@ export default function ChartPage() {
             onNeedOlderBars={loadOlderBars}
             settings={settings}
           />
-          {strategyId && user && (
-            <BacktestPanel
-              open={backtestOpen}
-              onClose={() => setBacktestOpen(false)}
-              strategyId={strategyId}
-              userId={user.id}
-              tf={tf}
-              defaultEngine={strategy?.engine}
-              defaultParams={strategy?.engine_params}
-              fromInput={fromInput || defaultFromTo.from}
-              toInput={toInput || defaultFromTo.to}
-            />
-          )}
         </div>
       </div>
 

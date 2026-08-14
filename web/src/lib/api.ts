@@ -57,7 +57,9 @@ export type BacktestResult = {
   }>;
 };
 
-const API_BASE = (import.meta.env.VITE_API_URL as string | undefined)?.replace(/\/$/, "") || "";
+const API_BASE = import.meta.env.DEV
+  ? ""
+  : (import.meta.env.VITE_API_URL as string | undefined)?.replace(/\/$/, "") || "";
 
 function apiUrl(path: string) {
   if (!API_BASE) return path;
@@ -65,7 +67,16 @@ function apiUrl(path: string) {
 }
 
 async function json<T>(url: string, init?: RequestInit): Promise<T> {
-  const res = await fetch(apiUrl(url), init);
+  let res: Response;
+  try {
+    res = await fetch(apiUrl(url), init);
+  } catch {
+    throw new Error(
+      import.meta.env.DEV
+        ? "Failed to reach the local API. Keep `npm run dev` (port 8000) running alongside the web app."
+        : "Failed to reach the API. Check VITE_API_URL."
+    );
+  }
   if (!res.ok) {
     const detail = await res.json().catch(() => ({}));
     throw new Error(detail.detail || res.statusText);
