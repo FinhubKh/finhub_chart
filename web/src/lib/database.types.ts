@@ -26,6 +26,22 @@ export type StrategyDrawingRow = {
   updated_at: string;
 };
 
+export type PineScriptRow = {
+  id: string;
+  user_id: string;
+  name: string;
+  source: string;
+  created_at: string;
+  updated_at: string;
+};
+
+export type StrategyPineOverlayRow = {
+  strategy_id: string;
+  script_id: string;
+  user_id: string;
+  created_at: string;
+};
+
 export type BacktestRunRow = {
   id: string;
   strategy_id: string;
@@ -93,6 +109,28 @@ export type Database = {
           start_at?: string | null;
           end_at?: string | null;
           result?: Json;
+          created_at?: string;
+        };
+        Update: never;
+      };
+      pine_scripts: {
+        Row: PineScriptRow;
+        Insert: {
+          id?: string;
+          user_id: string;
+          name: string;
+          source?: string;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: { name?: string; source?: string; updated_at?: string };
+      };
+      strategy_pine_overlays: {
+        Row: StrategyPineOverlayRow;
+        Insert: {
+          strategy_id: string;
+          script_id: string;
+          user_id: string;
           created_at?: string;
         };
         Update: never;

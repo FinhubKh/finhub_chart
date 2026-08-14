@@ -69,6 +69,28 @@ export default function StrategiesPage() {
     saveTheme(colorScheme);
   }, [colorScheme]);
 
+  useEffect(() => {
+    const id = "finhub-plex";
+    if (document.getElementById(id)) return;
+    const preG = document.createElement("link");
+    preG.rel = "preconnect";
+    preG.href = "https://fonts.googleapis.com";
+    const preS = document.createElement("link");
+    preS.rel = "preconnect";
+    preS.href = "https://fonts.gstatic.com";
+    preS.crossOrigin = "anonymous";
+    const link = document.createElement("link");
+    link.id = id;
+    link.rel = "stylesheet";
+    link.href =
+      "https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap";
+    document.head.append(preG, preS, link);
+  }, []);
+
+  useEffect(() => {
+    void import("./ChartPage");
+  }, []);
+
   const refresh = useCallback(async () => {
     setLoading(true);
     setError(null);

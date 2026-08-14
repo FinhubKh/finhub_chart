@@ -25,10 +25,27 @@ import {
   type ColorScheme,
 } from "../lib/theme";
 import type { ChartSettings } from "../lib/settings";
+import { type PineFill, type PinePlot, type PineShape } from "../lib/pine";
 
 /** Bars visible on first paint for phone — fitContent on 4k+ bars is unusable. */
 const MOBILE_VISIBLE_BARS = 120;
+
+function asOhlc(bar: Candle) {
+  return {
+    time: bar.time as UTCTimestamp,
+    open: bar.open,
+    high: bar.high,
+    low: bar.low,
+    close: bar.close,
+  };
+}
+
+function lastPoint<T extends { time: number; value: number }>(pts: T[]) {
+  return pts.length ? pts[pts.length - 1] : null;
+}
+
 import DrawingOverlay from "./DrawingOverlay";
+import PineOverlay from "./PineOverlay";
 
 type Props = {
   candles: Candle[];
@@ -52,7 +69,14 @@ type Props = {
   /** Called when the user pans near the left edge — parent should prepend bars. */
   onNeedOlderBars?: () => void;
   settings: ChartSettings;
+  pinePlots?: PinePlot[];
+  pineShapes?: PineShape[];
+  pineFills?: PineFill[];
 };
+
+const EMPTY_PINE_PLOTS: PinePlot[] = [];
+const EMPTY_PINE_SHAPES: PineShape[] = [];
+const EMPTY_PINE_FILLS: PineFill[] = [];
 
 type LineSeries = ISeriesApi<"Line">;
 type HistSeries = ISeriesApi<"Histogram">;
@@ -76,6 +100,9 @@ export default function ChartPane({
   canLoadOlder = false,
   onNeedOlderBars,
   settings,
+  pinePlots = EMPTY_PINE_PLOTS,
+  pineShapes = EMPTY_PINE_SHAPES,
+  pineFills = EMPTY_PINE_FILLS,
 }: Props) {
   const mainRef = useRef<HTMLDivElement>(null);
   const rsiRef = useRef<HTMLDivElement>(null);
@@ -100,6 +127,9 @@ export default function ChartPane({
   );
   const prevCandleCount = useRef(0);
   const prevFirstTime = useRef<number | null>(null);
+  const prevIndCount = useRef(0);
+  const prevIndFirst = useRef<number | null>(null);
+  const prevIndKey = useRef("");
   const followDetached = useRef(false);
   const applyingFollow = useRef(false);
 
@@ -329,6 +359,7 @@ export default function ChartPane({
         lineWidth: (opts.lineWidth ?? 2) as 1 | 2 | 3 | 4,
         priceLineVisible: false,
         lastValueVisible: opts.lastValueVisible ?? false,
+        crosshairMarkerVisible: false,
         lineStyle: opts.lineStyle,
       });
       overlaySeries.current.set(key, s);
@@ -486,15 +517,17 @@ export default function ChartPane({
         ? mainChart.current?.timeScale().getVisibleLogicalRange()
         : null;
 
-    candleSeries.current.setData(
-      candles.map((bar) => ({
-        time: bar.time as UTCTimestamp,
-        open: bar.open,
-        high: bar.high,
-        low: bar.low,
-        close: bar.close,
-      }))
-    );
+    const last = candles[next - 1];
+    const canUpdateLast =
+      Boolean(last) &&
+      sameSeries &&
+      (next === prev || next === prev + 1);
+
+    if (canUpdateLast) {
+      candleSeries.current.update(asOhlc(last));
+    } else {
+      candleSeries.current.setData(candles.map(asOhlc));
+    }
 
     const shouldFollow =
       followLatest && sameSeries && next > 0 && !followDetached.current;
@@ -536,6 +569,84 @@ export default function ChartPane({
   // Indicators — update series without resetting the viewport
   useEffect(() => {
     if (!candleSeries.current || !mainChart.current) return;
+
+    const next = candles.length;
+    const firstTime = candles[0]?.time ?? null;
+    const activeKey = [...activeIndicators].sort().join(",");
+    const incremental =
+      prevIndCount.current > 0 &&
+      next === prevIndCount.current + 1 &&
+      firstTime != null &&
+      prevIndFirst.current === firstTime &&
+      prevIndKey.current === activeKey;
+
+    const remember = () => {
+      prevIndCount.current = next;
+      prevIndFirst.current = firstTime;
+      prevIndKey.current = activeKey;
+    };
+
+    const lastBar = candles[next - 1];
+    if (incremental && lastBar) {
+      if (volumeSeries.current) {
+        volumeSeries.current.update({
+          time: lastBar.time as UTCTimestamp,
+          value: lastBar.volume,
+          color:
+            lastBar.close >= lastBar.open
+              ? "rgba(8,153,129,0.45)"
+              : "rgba(242,54,69,0.45)",
+        });
+      }
+      const push = (key: string, pts: { time: number; value: number }[]) => {
+        const s = overlaySeries.current.get(key);
+        const p = lastPoint(pts);
+        if (s && p) s.update({ time: p.time as UTCTimestamp, value: p.value });
+      };
+      if (activeIndicators.has("sma20")) push("sma20", calcSma(candles, 20));
+      if (activeIndicators.has("sma50")) push("sma50", calcSma(candles, 50));
+      if (activeIndicators.has("sma200")) push("sma200", calcSma(candles, 200));
+      if (activeIndicators.has("ema21")) push("ema21", calcEma(candles, 21));
+      if (activeIndicators.has("vwap")) push("vwap", calcVwap(candles));
+      if (activeIndicators.has("bbands") && !activeIndicators.has("bbma")) {
+        const bb = calcBollinger(candles, 20, 2);
+        push("bb_mid", bb.middle);
+        push("bb_up", bb.upper);
+        push("bb_lo", bb.lower);
+      }
+      if (activeIndicators.has("bbma")) {
+        const pack = calcBbma(candles);
+        push("bbma_bb_mid", pack.bbMiddle);
+        push("bbma_bb_up", pack.bbUpper);
+        push("bbma_bb_lo", pack.bbLower);
+        push("bbma_h5", pack.lwma5High);
+        push("bbma_h10", pack.lwma10High);
+        push("bbma_l5", pack.lwma5Low);
+        push("bbma_l10", pack.lwma10Low);
+        push("bbma_ema50", pack.ema50);
+      }
+      if (showRsi && rsiSeries.current) {
+        const p = lastPoint(calcRsi(candles, 14));
+        if (p) rsiSeries.current.update({ time: p.time as UTCTimestamp, value: p.value });
+      }
+      if (showMacd && macdLine.current && macdSignal.current && macdHist.current) {
+        const macd = calcMacd(candles);
+        const m = lastPoint(macd.macd);
+        const sig = lastPoint(macd.signal);
+        const h = lastPoint(macd.histogram);
+        if (m) macdLine.current.update({ time: m.time as UTCTimestamp, value: m.value });
+        if (sig) macdSignal.current.update({ time: sig.time as UTCTimestamp, value: sig.value });
+        if (h) {
+          macdHist.current.update({
+            time: h.time as UTCTimestamp,
+            value: h.value,
+            color: h.value >= 0 ? "rgba(8,153,129,0.65)" : "rgba(242,54,69,0.65)",
+          });
+        }
+      }
+      remember();
+      return;
+    }
 
     // Volume as optional indicator (off by default)
     const showVolume = activeIndicators.has("volume");
@@ -678,8 +789,39 @@ export default function ChartPane({
         }))
       );
     }
+    remember();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [candles, activeIndicators, showRsi, showMacd]);
+
+  useEffect(() => {
+    if (!mainChart.current) return;
+    const ids = new Set(pinePlots.map((p) => p.id));
+    for (const key of [...overlaySeries.current.keys()]) {
+      if (key.startsWith("pine:") && !ids.has(key)) removeLine(key);
+    }
+    for (const plot of pinePlots) {
+      const width = Math.max(1, Math.min(4, plot.lineWidth ?? 2)) as 1 | 2 | 3 | 4;
+      const s = ensureLine(plot.id, {
+        color: plot.color,
+        lineWidth: width,
+        lastValueVisible: false,
+      });
+      s?.applyOptions({
+        color: plot.color,
+        lineWidth: width,
+        lastValueVisible: false,
+        crosshairMarkerVisible: false,
+        priceLineVisible: false,
+      });
+      try {
+        s?.setData(plot.data as { time: UTCTimestamp; value: number }[]);
+      } catch {
+        /* skip malformed pine series rather than crash the chart */
+      }
+    }
+    // ensureLine / removeLine are recreated each render; chartApi re-runs after mount
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pinePlots, chartApi]);
 
   useEffect(() => {
     const nav = isNavTool(tool);
@@ -741,6 +883,12 @@ export default function ChartPane({
           series={seriesApi}
           candles={candles}
           enabled={activeIndicators.has("structure")}
+        />
+        <PineOverlay
+          chart={chartApi}
+          series={seriesApi}
+          fills={pineFills}
+          shapes={pineShapes}
         />
       </div>
       {showRsi && (

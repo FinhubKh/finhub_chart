@@ -180,7 +180,8 @@
   z-index: 5;
 }
 
-.structure-overlay {
+.structure-overlay,
+.pine-overlay {
   position: absolute;
   inset: 0;
   width: 100%;

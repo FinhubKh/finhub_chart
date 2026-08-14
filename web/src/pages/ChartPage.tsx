@@ -22,6 +22,14 @@ import {
 } from "../lib/theme";
 import { loadSettings, saveSettings, type ChartSettings } from "../lib/settings";
 import SettingsModal from "../components/SettingsModal";
+import PinePanel from "../components/PinePanel";
+import { compilePine, type PineFill, type PinePlot, type PineShape } from "../lib/pine";
+import {
+  addStrategyPineOverlay,
+  listPineScripts,
+  listStrategyPineOverlays,
+  removeStrategyPineOverlay,
+} from "../lib/pineApi";
 import {
   formatBarClock,
   indexAtOrAfter,
@@ -30,7 +38,7 @@ import {
   unixToLocalInput,
 } from "../lib/time";
 import { useAuth } from "../lib/auth";
-import type { StrategyRow } from "../lib/database.types";
+import type { PineScriptRow, StrategyRow } from "../lib/database.types";
 import {
   createStrategy,
   getStrategy,
@@ -39,6 +47,11 @@ import {
   updateStrategy,
 } from "../lib/strategiesApi";
 
+const EMPTY_PINE = {
+  plots: [] as PinePlot[],
+  shapes: [] as PineShape[],
+  fills: [] as PineFill[],
+};
 const TFS = ["1M", "5M", "15M", "1H", "4H", "1D", "1W", "1MN"];
 const INITIAL_BARS = 1_000;
 const OLDER_CHUNK = 4_000;
@@ -85,6 +98,8 @@ export default function ChartPage() {
   const [saveAsOpen, setSaveAsOpen] = useState(false);
   const [saveAsName, setSaveAsName] = useState("");
   const [saveAsBusy, setSaveAsBusy] = useState(false);
+  const [pineOpen, setPineOpen] = useState(false);
+  const [pineOnChart, setPineOnChart] = useState<PineScriptRow[]>([]);
 
   const drawingsHydratedRef = useRef(false);
   const skipNextDrawSaveRef = useRef(false);
@@ -128,6 +143,7 @@ export default function ChartPage() {
       setStrategy(null);
       setStrategyLoading(false);
       setDrawings([]);
+      setPineOnChart([]);
       return;
     }
 
@@ -142,6 +158,7 @@ export default function ChartPage() {
           setError("Strategy not found");
           setStrategy(null);
           setDrawings([]);
+          setPineOnChart([]);
           return;
         }
         setStrategy(row);
@@ -152,6 +169,20 @@ export default function ChartPage() {
         skipNextDrawSaveRef.current = true;
         setDrawings(payload);
         drawingsHydratedRef.current = true;
+        try {
+          const overlayIds = await listStrategyPineOverlays(strategyId);
+          if (cancelled) return;
+          if (!overlayIds.length) {
+            setPineOnChart([]);
+          } else {
+            const all = await listPineScripts();
+            if (cancelled) return;
+            const idSet = new Set(overlayIds);
+            setPineOnChart(all.filter((s) => idSet.has(s.id)));
+          }
+        } catch {
+          if (!cancelled) setPineOnChart([]);
+        }
       } catch (err) {
         if (!cancelled) {
           setError(String((err as Error).message || err));
@@ -318,6 +349,85 @@ export default function ChartPage() {
     return candles.slice(0, end + 1);
   }, [replayOn, candles, playhead, fromIdx, endIdx]);
 
+  const [pineCompiled, setPineCompiled] = useState(EMPTY_PINE);
+
+  useEffect(() => {
+    if (!pineOnChart.length) {
+      setPineCompiled(EMPTY_PINE);
+      return;
+    }
+    const scripts = pineOnChart;
+    const bars = candles;
+    const timer = window.setTimeout(
+      () => {
+        const plots: PinePlot[] = [];
+        const shapes: PineShape[] = [];
+        const fills: PineFill[] = [];
+        for (const script of scripts) {
+          const compiled = compilePine(script.source, bars, script.id);
+          plots.push(...compiled.plots);
+          shapes.push(...compiled.shapes);
+          fills.push(...compiled.fills);
+        }
+        setPineCompiled({ plots, shapes, fills });
+      },
+      bars.length > 2500 ? 48 : 0
+    );
+    return () => window.clearTimeout(timer);
+  }, [pineOnChart, candles]);
+
+  const pinePlots = useMemo(() => {
+    if (!replayOn || !visibleCandles.length) return pineCompiled.plots;
+    const lastT = visibleCandles[visibleCandles.length - 1].time;
+    return pineCompiled.plots.map((p) => ({
+      ...p,
+      data: p.data.filter((x) => x.time <= lastT),
+    }));
+  }, [pineCompiled, replayOn, visibleCandles]);
+
+  const pineShapes = useMemo(() => {
+    if (!replayOn || !visibleCandles.length) return pineCompiled.shapes;
+    const lastT = visibleCandles[visibleCandles.length - 1].time;
+    return pineCompiled.shapes.filter((s) => s.time <= lastT);
+  }, [pineCompiled, replayOn, visibleCandles]);
+
+  const pineFills = useMemo(() => {
+    if (!replayOn || !visibleCandles.length) return pineCompiled.fills;
+    const lastT = visibleCandles[visibleCandles.length - 1].time;
+    return pineCompiled.fills.map((f) => ({
+      ...f,
+      a: f.a.filter((x) => x.time <= lastT),
+      b: f.b.filter((x) => x.time <= lastT),
+    }));
+  }, [pineCompiled, replayOn, visibleCandles]);
+
+  const togglePine = (script: PineScriptRow) => {
+    const on = pineOnChart.some((s) => s.id === script.id);
+    setPineOnChart((prev) =>
+      on ? prev.filter((s) => s.id !== script.id) : [...prev, script]
+    );
+    if (strategyId && user) {
+      if (on) {
+        void removeStrategyPineOverlay(strategyId, script.id).catch(() => {});
+      } else {
+        void addStrategyPineOverlay({
+          strategyId,
+          scriptId: script.id,
+          userId: user.id,
+        }).catch(() => {});
+      }
+    }
+  };
+
+  const onPineSaved = (row: PineScriptRow) => {
+    setPineOnChart((prev) => prev.map((s) => (s.id === row.id ? { ...s, ...row } : s)));
+  };
+
+  const onPineDeleted = (id: string) => {
+    setPineOnChart((prev) => prev.filter((s) => s.id !== id));
+    if (strategyId) void removeStrategyPineOverlay(strategyId, id).catch(() => {});
+  };
+
   const canLoadOlder =
     !replayOn &&
     !loading &&
@@ -483,6 +593,13 @@ export default function ChartPage() {
         tf,
       });
       await saveDrawings(row.id, user.id, drawings);
+      for (const script of pineOnChart) {
+        await addStrategyPineOverlay({
+          strategyId: row.id,
+          scriptId: script.id,
+          userId: user.id,
+        });
+      }
       setSaveAsOpen(false);
       setSaveAsName("");
       setSearchParams({ strategyId: row.id });
@@ -561,7 +678,7 @@ export default function ChartPage() {
           <Link className="fh-btn subtle" to="/strategies" title="Strategies">
             Strategies
           </Link>
-          {!strategyId && drawings.length > 0 ? (
+          {!strategyId && (drawings.length > 0 || pineOnChart.length > 0) ? (
             <button
               type="button"
               className="fh-btn subtle"
@@ -575,6 +692,19 @@ export default function ChartPage() {
             </button>
           ) : null}
           <IndicatorPanel active={activeIndicators} onToggle={toggleIndicator} />
+          <button
+            type="button"
+            className={`ind-menu-btn ${pineOpen || pineOnChart.length ? "active" : ""}`}
+            onClick={() => setPineOpen((v) => !v)}
+            aria-pressed={pineOpen}
+            title="Pine Script editor"
+          >
+            <span className="ind-menu-label-full">Pine</span>
+            <span className="ind-menu-label-short">Pine</span>
+            {pineOnChart.length > 0 && (
+              <em className="ind-count">{pineOnChart.length}</em>
+            )}
+          </button>
           <ReplayPeriodPop
             open={replayPopOpen}
             onOpenChange={openReplayPop}
@@ -679,7 +809,7 @@ export default function ChartPage() {
           }}
         />
 
-        <div className="chart-column">
+        <div className={`chart-column${pineOpen ? " pine-open" : ""}`}>
           {chartBusy && (
             <div className="chart-loading-overlay" role="status" aria-live="polite">
               <div className="chart-loading-pop">
@@ -707,7 +837,22 @@ export default function ChartPage() {
             canLoadOlder={canLoadOlder}
             onNeedOlderBars={loadOlderBars}
             settings={settings}
+            pinePlots={pinePlots}
+            pineShapes={pineShapes}
+            pineFills={pineFills}
           />
+          {user ? (
+            <PinePanel
+              open={pineOpen}
+              onClose={() => setPineOpen(false)}
+              userId={user.id}
+              candlesLen={visibleCandles.length}
+              onChartIds={pineOnChart.map((s) => s.id)}
+              onToggleChart={togglePine}
+              onSaved={onPineSaved}
+              onDeleted={onPineDeleted}
+            />
+          ) : null}
         </div>
       </div>
 

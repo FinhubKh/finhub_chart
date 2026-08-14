@@ -1,9 +1,19 @@
+import { lazy, Suspense } from "react";
 import { Navigate, Route, Routes } from "react-router-dom";
 import ProtectedRoute from "./components/ProtectedRoute";
 import LoginPage from "./components/LoginPage";
-import StrategiesPage from "./pages/StrategiesPage";
-import ChartPage from "./pages/ChartPage";
 import { useAuth } from "./lib/auth";
+
+const StrategiesPage = lazy(() => import("./pages/StrategiesPage"));
+const ChartPage = lazy(() => import("./pages/ChartPage"));
+
+function PageFallback() {
+  return (
+    <div className="auth-boot">
+      <p>Loading…</p>
+    </div>
+  );
+}
 
 function HomeRedirect() {
   const { ready, user } = useAuth();
@@ -25,7 +35,9 @@ export default function App() {
         path="/strategies"
         element={
           <ProtectedRoute>
-            <StrategiesPage />
+            <Suspense fallback={<PageFallback />}>
+              <StrategiesPage />
+            </Suspense>
           </ProtectedRoute>
         }
       />
@@ -33,7 +45,9 @@ export default function App() {
         path="/chart"
         element={
           <ProtectedRoute>
-            <ChartPage />
+            <Suspense fallback={<PageFallback />}>
+              <ChartPage />
+            </Suspense>
           </ProtectedRoute>
         }
       />
