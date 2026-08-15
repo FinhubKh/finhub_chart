@@ -1,0 +1,11 @@
+{
+  "name": "simi-auto-gateway",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "node vps-server.mjs"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
