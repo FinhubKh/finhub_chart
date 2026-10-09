@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
@@ -10,9 +11,20 @@ from pydantic import BaseModel, Field
 from .backtester import result_to_dict, run_backtest
 from .config import TIMEFRAMES
 from .data_loader import candles_payload, candles_range, load_ohlc, timeframe_status
+from .db import close_pool, init_pool
+from .instruments import DEFAULT_PAIR, INSTRUMENTS, instrument_symbols, normalize_pair
 from .strategies import create_strategy, list_strategies
+from .user_routes import router as user_router
 
-app = FastAPI(title="Finhubkh XAUUSD Terminal", version="1.0.0")
+
+@asynccontextmanager
+async def lifespan(_app: FastAPI):
+    init_pool()
+    yield
+    close_pool()
+
+
+app = FastAPI(title="Finhubkh Chart Terminal", version="1.1.0", lifespan=lifespan)
 
 _cors = [
     o.strip()
@@ -29,6 +41,8 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+app.include_router(user_router)
+
 
 class BacktestRequest(BaseModel):
     strategy: str = Field(..., examples=["sma_cross"])
@@ -41,6 +55,7 @@ class BacktestRequest(BaseModel):
     stop_loss_pct: float | None = None
     take_profit_pct: float | None = None
     limit: int | None = 20_000
+    pair: str = DEFAULT_PAIR
 
 
 @app.get("/api/health")
@@ -48,10 +63,20 @@ def health():
     return {"ok": True}
 
 
+@app.get("/api/instruments")
+def get_instruments():
+    return {
+        "default": DEFAULT_PAIR,
+        "instruments": INSTRUMENTS,
+        "symbols": instrument_symbols(),
+    }
+
+
 @app.get("/api/timeframes")
-def get_timeframes():
+def get_timeframes(pair: str = Query(DEFAULT_PAIR)):
     try:
-        return {"timeframes": TIMEFRAMES, "files": timeframe_status()}
+        symbol = normalize_pair(pair)
+        return {"pair": symbol, "timeframes": TIMEFRAMES, "files": timeframe_status(symbol)}
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e)) from e
 
@@ -62,10 +87,14 @@ def get_strategies():
 
 
 @app.get("/api/range")
-def get_range(tf: str = Query(..., description="Timeframe e.g. 1H")):
+def get_range(
+    tf: str = Query(..., description="Timeframe e.g. 1H"),
+    pair: str = Query(DEFAULT_PAIR),
+):
     """Full history bounds for replay period picking."""
     try:
-        return candles_range(tf)
+        symbol = normalize_pair(pair)
+        return candles_range(tf, symbol)
     except FileNotFoundError as e:
         raise HTTPException(status_code=404, detail=str(e)) from e
     except ValueError as e:
@@ -95,8 +124,10 @@ def get_candles(
         le=5_000,
         description="Extra bars before `start` (for indicators during replay).",
     ),
+    pair: str = Query(DEFAULT_PAIR),
 ):
     try:
+        symbol = normalize_pair(pair)
         return candles_payload(
             tf,
             start=start,
@@ -104,6 +135,7 @@ def get_candles(
             limit=limit,
             lookback=lookback,
             before=before,
+            pair=symbol,
         )
     except FileNotFoundError as e:
         raise HTTPException(status_code=404, detail=str(e)) from e
@@ -121,6 +153,7 @@ def post_backtest(body: BacktestRequest):
             start=body.start,
             end=body.end,
             limit=body.limit,
+            pair=normalize_pair(body.pair),
         )
         strategy = create_strategy(body.strategy, body.params)
         result = run_backtest(

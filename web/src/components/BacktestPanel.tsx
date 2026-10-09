@@ -13,7 +13,6 @@ type Props = {
   open: boolean;
   onClose: () => void;
   strategyId: string;
-  userId: string;
   tf: string;
   defaultEngine?: string | null;
   defaultParams?: Record<string, number>;
@@ -32,7 +31,6 @@ export default function BacktestPanel({
   open,
   onClose,
   strategyId,
-  userId,
   tf,
   defaultEngine,
   defaultParams,
@@ -104,7 +102,6 @@ export default function BacktestPanel({
     setError(null);
     try {
       const row = await saveBacktestRun({
-        userId,
         strategyId,
         engine,
         params,

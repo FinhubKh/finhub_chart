@@ -2,7 +2,7 @@ import { lazy, Suspense } from "react";
 import { Navigate, Route, Routes } from "react-router-dom";
 import ProtectedRoute from "./components/ProtectedRoute";
 import LoginPage from "./components/LoginPage";
-import { useAuth } from "./lib/auth";
+import LandingPage from "./pages/LandingPage";
 
 const StrategiesPage = lazy(() => import("./pages/StrategiesPage"));
 const ChartPage = lazy(() => import("./pages/ChartPage"));
@@ -15,21 +15,10 @@ function PageFallback() {
   );
 }
 
-function HomeRedirect() {
-  const { ready, user } = useAuth();
-  if (!ready) {
-    return (
-      <div className="auth-boot">
-        <p>Loading…</p>
-      </div>
-    );
-  }
-  return <Navigate to={user ? "/strategies" : "/login"} replace />;
-}
-
 export default function App() {
   return (
     <Routes>
+      <Route path="/" element={<LandingPage />} />
       <Route path="/login" element={<LoginPage />} />
       <Route
         path="/strategies"
@@ -51,7 +40,6 @@ export default function App() {
           </ProtectedRoute>
         }
       />
-      <Route path="/" element={<HomeRedirect />} />
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
   );

@@ -17,9 +17,10 @@ export default function ProtectedRoute({ children }: { children: React.ReactNode
     return (
       <div className="auth-boot">
         <p>
-          Supabase is not configured yet. Add <code>VITE_SUPABASE_URL</code> and{" "}
-          <code>VITE_SUPABASE_ANON_KEY</code> to <code>web/.env.local</code>, then restart the
-          dev server.
+          Firebase is not configured yet. Add <code>VITE_FIREBASE_API_KEY</code>,{" "}
+          <code>VITE_FIREBASE_AUTH_DOMAIN</code>, <code>VITE_FIREBASE_PROJECT_ID</code>, and{" "}
+          <code>VITE_FIREBASE_APP_ID</code> to <code>web/.env.local</code>, then restart the dev
+          server.
         </p>
       </div>
     );
