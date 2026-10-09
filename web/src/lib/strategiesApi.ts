@@ -1,111 +1,91 @@
+// Strategies, drawings, and backtest runs now live behind the Cloud Run
+// `/api/user/...` routes (see `api/app/user_routes.py`). The server derives
+// the owning user from the Firebase Bearer token, so callers never pass a
+// `userId` here.
+
+import { ApiError, authFetch, authJson } from "./apiAuth";
 import type { Drawing } from "./drawings";
-import type { BacktestRunRow, Json, StrategyRow } from "./database.types";
-import { supabase } from "./supabase";
+import type { BacktestRunRow, StrategyRow } from "./database.types";
 
 export async function listStrategies(): Promise<StrategyRow[]> {
-  const { data, error } = await supabase
-    .from("strategies")
-    .select("*")
-    .order("updated_at", { ascending: false });
-  if (error) throw error;
-  return (data || []) as StrategyRow[];
+  const data = await authJson<{ strategies: StrategyRow[] }>("/api/user/strategies");
+  return data.strategies || [];
 }
 
 export async function getStrategy(id: string): Promise<StrategyRow | null> {
-  const { data, error } = await supabase
-    .from("strategies")
-    .select("*")
-    .eq("id", id)
-    .maybeSingle();
-  if (error) throw error;
-  return data as StrategyRow | null;
+  // The strategies router doesn't expose a single-item GET; an empty PATCH
+  // body is a no-op update that returns the current row (see
+  // `update_user_strategy` in `user_routes.py`).
+  try {
+    const data = await authJson<{ strategy: StrategyRow }>(
+      `/api/user/strategies/${id}`,
+      { method: "PATCH", body: JSON.stringify({}) }
+    );
+    return data.strategy;
+  } catch (err) {
+    if (err instanceof ApiError && err.status === 404) return null;
+    throw err;
+  }
 }
 
 export async function createStrategy(input: {
-  userId: string;
   name: string;
   pair?: string;
   tf?: string;
-  notes?: string;
+  notes?: string | null;
   engine?: string | null;
   engine_params?: Record<string, number>;
 }): Promise<StrategyRow> {
-  const { data, error } = await supabase
-    .from("strategies")
-    .insert({
-      user_id: input.userId,
+  const data = await authJson<{ strategy: StrategyRow }>("/api/user/strategies", {
+    method: "POST",
+    body: JSON.stringify({
       name: input.name.trim(),
       pair: input.pair || "XAUUSD",
       tf: input.tf || "1H",
-      notes: input.notes || null,
+      notes: input.notes ?? null,
       engine: input.engine ?? null,
       engine_params: input.engine_params || {},
-    })
-    .select("*")
-    .single();
-  if (error) throw error;
-  return data as StrategyRow;
+    }),
+  });
+  return data.strategy;
 }
 
 export async function deleteStrategy(id: string): Promise<void> {
-  const { error } = await supabase.from("strategies").delete().eq("id", id);
-  if (error) throw error;
+  await authFetch(`/api/user/strategies/${id}`, { method: "DELETE" });
 }
 
 export async function updateStrategy(
   id: string,
   patch: Partial<Pick<StrategyRow, "name" | "pair" | "tf" | "notes" | "engine" | "engine_params">>
 ): Promise<void> {
-  const { error } = await supabase.from("strategies").update(patch).eq("id", id);
-  if (error) throw error;
+  await authFetch(`/api/user/strategies/${id}`, {
+    method: "PATCH",
+    body: JSON.stringify(patch),
+  });
 }
 
 export async function loadDrawings(strategyId: string): Promise<Drawing[]> {
-  const { data, error } = await supabase
-    .from("strategy_drawings")
-    .select("payload")
-    .eq("strategy_id", strategyId)
-    .maybeSingle();
-  if (error) throw error;
-  const payload = data?.payload;
-  return Array.isArray(payload) ? (payload as Drawing[]) : [];
+  const data = await authJson<{ drawings: Drawing[] }>(
+    `/api/user/strategies/${strategyId}/drawings`
+  );
+  return Array.isArray(data.drawings) ? data.drawings : [];
 }
 
-export async function saveDrawings(
-  strategyId: string,
-  userId: string,
-  drawings: Drawing[]
-): Promise<void> {
-  const { error } = await supabase.from("strategy_drawings").upsert(
-    {
-      strategy_id: strategyId,
-      user_id: userId,
-      payload: drawings as unknown as Json,
-      updated_at: new Date().toISOString(),
-    },
-    { onConflict: "strategy_id" }
-  );
-  if (error) throw error;
-  // Touch strategy updated_at so list sorts correctly
-  await supabase
-    .from("strategies")
-    .update({ updated_at: new Date().toISOString() })
-    .eq("id", strategyId);
+export async function saveDrawings(strategyId: string, drawings: Drawing[]): Promise<void> {
+  await authFetch(`/api/user/strategies/${strategyId}/drawings`, {
+    method: "PUT",
+    body: JSON.stringify({ drawings }),
+  });
 }
 
 export async function listBacktestRuns(strategyId: string): Promise<BacktestRunRow[]> {
-  const { data, error } = await supabase
-    .from("backtest_runs")
-    .select("*")
-    .eq("strategy_id", strategyId)
-    .order("created_at", { ascending: false })
-    .limit(20);
-  if (error) throw error;
-  return (data || []) as BacktestRunRow[];
+  const data = await authJson<{ runs: BacktestRunRow[] }>(
+    `/api/user/strategies/${strategyId}/backtest-runs`
+  );
+  return data.runs || [];
 }
 
 export async function saveBacktestRun(input: {
-  userId: string;
   strategyId: string;
   engine: string;
   params: Record<string, number>;
@@ -123,20 +103,19 @@ export async function saveBacktestRun(input: {
     result.markers = (result.markers as unknown[]).slice(0, 200);
   }
 
-  const { data, error } = await supabase
-    .from("backtest_runs")
-    .insert({
-      user_id: input.userId,
-      strategy_id: input.strategyId,
-      engine: input.engine,
-      params: input.params,
-      tf: input.tf,
-      start_at: input.start || null,
-      end_at: input.end || null,
-      result,
-    })
-    .select("*")
-    .single();
-  if (error) throw error;
-  return data as BacktestRunRow;
+  const data = await authJson<{ run: BacktestRunRow }>(
+    `/api/user/strategies/${input.strategyId}/backtest-runs`,
+    {
+      method: "POST",
+      body: JSON.stringify({
+        engine: input.engine,
+        params: input.params,
+        tf: input.tf,
+        start_at: input.start || null,
+        end_at: input.end || null,
+        result,
+      }),
+    }
+  );
+  return data.run;
 }

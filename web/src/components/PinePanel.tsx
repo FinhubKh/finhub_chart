@@ -12,7 +12,6 @@ import "../styles/components/pine-panel.css";
 type Props = {
   open: boolean;
   onClose: () => void;
-  userId: string;
   candlesLen: number;
   onChartIds: string[];
   onToggleChart: (script: PineScriptRow) => void;
@@ -23,7 +22,6 @@ type Props = {
 export default function PinePanel({
   open,
   onClose,
-  userId,
   candlesLen,
   onChartIds,
   onToggleChart,
@@ -52,12 +50,7 @@ export default function PinePanel({
       setItems(rows);
       setError(null);
     } catch (err) {
-      const msg = String((err as Error).message || err);
-      setError(
-        msg.includes("schema cache") || msg.includes("does not exist")
-          ? "Run supabase/migrations/002_pine_scripts.sql in the Supabase SQL editor, then refresh."
-          : msg
-      );
+      setError(String((err as Error).message || err));
     }
   };
 
@@ -103,7 +96,7 @@ export default function PinePanel({
         onSaved?.({ ...active!, name: title, source });
         setHint("Saved.");
       } else {
-        const row = await createPineScript({ userId, name: title, source });
+        const row = await createPineScript({ name: title, source });
         setItems((prev) => [row, ...prev]);
         setActiveId(row.id);
         setName(row.name);
