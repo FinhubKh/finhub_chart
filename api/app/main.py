@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
@@ -10,9 +11,18 @@ from pydantic import BaseModel, Field
 from .backtester import result_to_dict, run_backtest
 from .config import TIMEFRAMES
 from .data_loader import candles_payload, candles_range, load_ohlc, timeframe_status
+from .db import close_pool, init_pool
 from .strategies import create_strategy, list_strategies
 
-app = FastAPI(title="Finhubkh XAUUSD Terminal", version="1.0.0")
+
+@asynccontextmanager
+async def lifespan(_app: FastAPI):
+    init_pool()
+    yield
+    close_pool()
+
+
+app = FastAPI(title="Finhubkh XAUUSD Terminal", version="1.0.0", lifespan=lifespan)
 
 _cors = [
     o.strip()
