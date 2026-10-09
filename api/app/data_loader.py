@@ -5,14 +5,17 @@ from pathlib import Path
 
 import pandas as pd
 
-from .config import DATA_DIR, TIMEFRAME_FILES, TIMEFRAMES
+from .config import TIMEFRAMES, data_dir, timeframe_files
+from .instruments import normalize_pair
 
 
-def file_for_tf(tf: str) -> Path:
+def file_for_tf(tf: str, pair: str | None = None) -> Path:
+    symbol = normalize_pair(pair)
+    files = timeframe_files(symbol)
     key = tf.upper()
-    if key not in TIMEFRAME_FILES:
+    if key not in files:
         raise ValueError(f"Unsupported timeframe: {tf}. Use one of {TIMEFRAMES}")
-    return DATA_DIR / TIMEFRAME_FILES[key]
+    return data_dir(symbol) / files[key]
 
 
 def _csv_edge_meta(path: Path) -> tuple[int, str | None, str | None]:
@@ -51,15 +54,18 @@ def _csv_edge_meta(path: Path) -> tuple[int, str | None, str | None]:
         return 0, None, None
 
 
-def timeframe_status() -> list[dict]:
+def timeframe_status(pair: str | None = None) -> list[dict]:
     from .storage import finhub_uses_r2, r2_timeframe_status
 
+    symbol = normalize_pair(pair)
     if finhub_uses_r2():
-        return r2_timeframe_status()
+        return r2_timeframe_status(symbol)
 
+    files = timeframe_files(symbol)
+    folder = data_dir(symbol)
     items: list[dict] = []
-    for tf, filename in TIMEFRAME_FILES.items():
-        path = DATA_DIR / filename
+    for tf, filename in files.items():
+        path = folder / filename
         exists = path.exists()
         rows = 0
         start = None
@@ -79,6 +85,7 @@ def timeframe_status() -> list[dict]:
                 "end": end,
                 "size_bytes": size_bytes,
                 "source": "local",
+                "pair": symbol,
             }
         )
     return items
@@ -99,10 +106,10 @@ def _load_csv_cached(path_str: str, mtime: float) -> pd.DataFrame:
     return df
 
 
-def _load_df(tf: str) -> pd.DataFrame:
+def _load_df(tf: str, pair: str | None = None) -> pd.DataFrame:
     from .storage import load_finhub_dataframe
 
-    return load_finhub_dataframe(tf).copy()
+    return load_finhub_dataframe(tf, pair)
 
 
 def load_ohlc(
@@ -110,8 +117,9 @@ def load_ohlc(
     start: str | None = None,
     end: str | None = None,
     limit: int | None = None,
+    pair: str | None = None,
 ) -> pd.DataFrame:
-    df = _load_df(tf)
+    df = _load_df(tf, pair)
     if start:
         df = df[df["datetime"] >= pd.to_datetime(start, utc=True)]
     if end:
@@ -121,11 +129,11 @@ def load_ohlc(
     return df.reset_index(drop=True)
 
 
-def candles_range(tf: str) -> dict:
+def candles_range(tf: str, pair: str | None = None) -> dict:
     """Full dataset bounds for a timeframe (cheap on R2 — no full CSV load)."""
     from .storage import finhub_bounds
 
-    return finhub_bounds(tf)
+    return finhub_bounds(tf, pair)
 
 
 def candles_payload(
@@ -135,6 +143,7 @@ def candles_payload(
     limit: int | None = None,
     lookback: int = 0,
     before: str | None = None,
+    pair: str | None = None,
 ) -> dict:
     """Return OHLC candles.
 
@@ -144,12 +153,13 @@ def candles_payload(
       (scroll-left history pagination).
     - `start`/`end`: explicit window (+ optional `lookback` before `start`).
     """
+    symbol = normalize_pair(pair)
     # —— Fast path: recent window only (chart first paint) ——
     # Avoid downloading the entire R2 CSV when the UI only needs the last N bars.
     if before is None and start is None and end is None and limit is not None and limit > 0:
         from .storage import load_finhub_tail
 
-        df, total_available, has_more = load_finhub_tail(tf, int(limit))
+        df, total_available, has_more = load_finhub_tail(tf, int(limit), symbol)
         if df.empty:
             return {
                 "tf": tf.upper(),
@@ -190,7 +200,7 @@ def candles_payload(
         from .storage import load_finhub_before
 
         lim = int(limit) if limit is not None and limit > 0 else 4_000
-        df, total_available, has_more = load_finhub_before(tf, before, lim)
+        df, total_available, has_more = load_finhub_before(tf, before, lim, symbol)
         if df.empty:
             return {
                 "tf": tf.upper(),
@@ -227,7 +237,7 @@ def candles_payload(
         }
 
     # Explicit start/end (replay) still needs the full frame
-    df_full = _load_df(tf)
+    df_full = _load_df(tf, symbol)
     if df_full.empty:
         return {
             "tf": tf.upper(),

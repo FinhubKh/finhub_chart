@@ -1,19 +1,23 @@
 from pathlib import Path
 import os
 
+from .instruments import DEFAULT_PAIR, normalize_pair, pair_folder
+
 # Repo root locally; in Docker set APP_ROOT=/app
 ROOT = Path(os.environ.get("APP_ROOT") or Path(__file__).resolve().parents[2])
-DATA_DIR = ROOT / "data" / "xauusd"
 
-TIMEFRAME_FILES = {
-    "1M": "XAUUSD_1M.csv",
-    "5M": "XAUUSD_5M.csv",
-    "15M": "XAUUSD_15M.csv",
-    "1H": "XAUUSD_1H.csv",
-    "4H": "XAUUSD_4H.csv",
-    "1D": "XAUUSD_1D.csv",
-    "1W": "XAUUSD_1W.csv",
-    "1MN": "XAUUSD_1MN.csv",
-}
+TIMEFRAMES = ["1M", "5M", "15M", "1H", "4H", "1D", "1W", "1MN"]
 
-TIMEFRAMES = list(TIMEFRAME_FILES.keys())
+
+def data_dir(pair: str | None = None) -> Path:
+    return ROOT / "data" / pair_folder(pair)
+
+
+def timeframe_files(pair: str | None = None) -> dict[str, str]:
+    symbol = normalize_pair(pair)
+    return {tf: f"{symbol}_{tf}.csv" for tf in TIMEFRAMES}
+
+
+# Back-compat for callers that still import these names (XAUUSD).
+DATA_DIR = data_dir(DEFAULT_PAIR)
+TIMEFRAME_FILES = timeframe_files(DEFAULT_PAIR)

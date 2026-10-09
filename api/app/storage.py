@@ -12,16 +12,17 @@ import pandas as pd
 from botocore.client import Config
 from botocore.exceptions import ClientError
 
-from .config import DATA_DIR, ROOT, TIMEFRAME_FILES, TIMEFRAMES
+from .config import ROOT, TIMEFRAMES, data_dir, timeframe_files
+from .instruments import normalize_pair
 
 _locks: dict[str, threading.Lock] = {}
 _locks_guard = threading.Lock()
 
 # Full-frame cache (heavy). Used for history scroll / replay windows.
-_df_cache: dict[str, tuple[str, pd.DataFrame]] = {}  # tf -> (etag, df)
-# Lightweight bounds cache: tf -> (etag, meta dict)
+_df_cache: dict[str, tuple[str, pd.DataFrame]] = {}  # pair:tf -> (etag, df)
+# Lightweight bounds cache: pair:tf -> (etag, meta dict)
 _bounds_cache: dict[str, tuple[str, dict]] = {}
-# Recent-tail cache: tf -> (etag, limit, df)
+# Recent-tail cache: pair:tf -> (etag, limit, df)
 _tail_cache: dict[str, tuple[str, int, pd.DataFrame]] = {}
 
 _CSV_HEADER = "datetime,open,high,low,close,volume\n"
@@ -84,10 +85,20 @@ def _s3():
     )
 
 
-def _object_key(filename: str) -> str:
-    load_dotenv()
-    prefix = (os.environ.get("R2_PREFIX") or "xauusd").strip().strip("/")
-    return f"{prefix}/{filename}" if prefix else filename
+def _norm(pair: str | None, tf: str) -> tuple[str, str, str, dict[str, str]]:
+    symbol = normalize_pair(pair)
+    key = tf.upper()
+    files = timeframe_files(symbol)
+    if key not in files:
+        raise ValueError(f"Unsupported timeframe: {tf}. Use one of {TIMEFRAMES}")
+    cache_key = f"{symbol}:{key}"
+    return symbol, key, cache_key, files
+
+
+def _object_key(filename: str, pair: str | None = None) -> str:
+    """R2 key: {symbol.lower()}/{SYMBOL}_{TF}.csv (matches existing xauusd/ layout)."""
+    folder = normalize_pair(pair).lower()
+    return f"{folder}/{filename}"
 
 
 def _normalize_ohlc(df: pd.DataFrame) -> pd.DataFrame:
@@ -102,12 +113,12 @@ def _normalize_ohlc(df: pd.DataFrame) -> pd.DataFrame:
     return df.reset_index(drop=True)
 
 
-def _load_local_csv(tf: str) -> pd.DataFrame:
-    key = tf.upper()
-    path = DATA_DIR / TIMEFRAME_FILES[key]
+def _load_local_csv(tf: str, pair: str | None = None) -> pd.DataFrame:
+    symbol, key, _, files = _norm(pair, tf)
+    path = data_dir(symbol) / files[key]
     if not path.exists():
         raise FileNotFoundError(
-            f"Missing FinHub data for {tf}: {path}. Run `npm run data` first."
+            f"Missing FinHub data for {symbol} {tf}: {path}. Run `npm run data` first."
         )
     return _normalize_ohlc(pd.read_csv(path))
 
@@ -212,28 +223,28 @@ def _r2_bounds(bucket: str, obj_key: str, etag: str, size: int) -> dict:
     }
 
 
-def r2_timeframe_bounds(tf: str) -> dict:
+def r2_timeframe_bounds(tf: str, pair: str | None = None) -> dict:
     """Cheap history bounds for replay picker (no full CSV load)."""
     if not r2_configured():
         raise RuntimeError("R2 credentials incomplete")
-    key = tf.upper()
-    filename = TIMEFRAME_FILES[key]
+    symbol, key, cache_key, files = _norm(pair, tf)
+    filename = files[key]
     bucket = os.environ["R2_BUCKET"].strip()
-    obj_key = _object_key(filename)
+    obj_key = _object_key(filename, symbol)
 
-    with _lock_for(f"bounds:{filename}"):
+    with _lock_for(f"bounds:{cache_key}"):
         head = _r2_head(bucket, obj_key)
         etag = str(head.get("ETag") or "").strip('"')
         size = int(head.get("ContentLength") or 0)
-        cached = _bounds_cache.get(key)
+        cached = _bounds_cache.get(cache_key)
         if cached and cached[0] == etag:
             return cached[1]
         meta = _r2_bounds(bucket, obj_key, etag, size)
-        _bounds_cache[key] = (etag, meta)
+        _bounds_cache[cache_key] = (etag, meta)
         return meta
 
 
-def _fetch_r2_tail(tf: str, limit: int) -> tuple[pd.DataFrame, int, bool]:
+def _fetch_r2_tail(tf: str, limit: int, pair: str | None = None) -> tuple[pd.DataFrame, int, bool]:
     """
     Download only the end of the CSV for a trailing window.
     Returns (df, total_available_estimate, has_more).
@@ -241,25 +252,25 @@ def _fetch_r2_tail(tf: str, limit: int) -> tuple[pd.DataFrame, int, bool]:
     if not r2_configured():
         raise RuntimeError("R2 credentials incomplete")
 
-    key = tf.upper()
-    filename = TIMEFRAME_FILES[key]
+    symbol, key, cache_key, files = _norm(pair, tf)
+    filename = files[key]
     bucket = os.environ["R2_BUCKET"].strip()
-    obj_key = _object_key(filename)
+    obj_key = _object_key(filename, symbol)
     need = max(1, int(limit))
 
-    with _lock_for(f"tail:{filename}"):
+    with _lock_for(f"tail:{cache_key}"):
         head = _r2_head(bucket, obj_key)
         etag = str(head.get("ETag") or "").strip('"')
         size = int(head.get("ContentLength") or 0)
 
         # Reuse full-frame cache if already warm
-        full = _df_cache.get(key)
+        full = _df_cache.get(cache_key)
         if full and full[0] == etag:
             df = full[1]
             out = df.iloc[-need:] if len(df) > need else df
             return out.reset_index(drop=True), int(len(df)), bool(len(df) > need)
 
-        cached = _tail_cache.get(key)
+        cached = _tail_cache.get(cache_key)
         if cached and cached[0] == etag and cached[1] >= need:
             out = cached[2].iloc[-need:] if len(cached[2]) > need else cached[2]
             est = max(need, int((size - len(_CSV_HEADER)) / _AVG_ROW_BYTES))
@@ -289,88 +300,84 @@ def _fetch_r2_tail(tf: str, limit: int) -> tuple[pd.DataFrame, int, bool]:
 
         out = df.iloc[-need:] if len(df) > need else df
         out = out.reset_index(drop=True)
-        _tail_cache[key] = (etag, need, out)
+        _tail_cache[cache_key] = (etag, need, out)
         est = max(len(df), int((size - len(_CSV_HEADER)) / _AVG_ROW_BYTES))
         has_more = start > 0 or len(df) > need
         return out, est, has_more
 
 
-def _fetch_r2_dataframe(tf: str) -> pd.DataFrame:
+def _fetch_r2_dataframe(tf: str, pair: str | None = None) -> pd.DataFrame:
     """Full CSV download into memory/disk cache (history / replay)."""
     if not r2_configured():
         raise RuntimeError(
             "FINHUB_DATA_SOURCE=r2 but R2 credentials are incomplete in .env"
         )
 
-    key = tf.upper()
-    filename = TIMEFRAME_FILES[key]
+    symbol, key, cache_key, files = _norm(pair, tf)
+    filename = files[key]
     load_dotenv()
     bucket = os.environ["R2_BUCKET"].strip()
-    obj_key = _object_key(filename)
+    obj_key = _object_key(filename, symbol)
 
-    with _lock_for(filename):
+    with _lock_for(cache_key):
         head = _r2_head(bucket, obj_key)
         etag = str(head.get("ETag") or "").strip('"')
-        cached = _df_cache.get(key)
+        cached = _df_cache.get(cache_key)
         if cached and cached[0] == etag:
             return cached[1]
 
-        tmp_path = Path(tempfile.gettempdir()) / f"finhub_{etag}_{filename}"
+        tmp_path = Path(tempfile.gettempdir()) / f"finhub_{symbol}_{etag}_{filename}"
         if tmp_path.exists():
             try:
                 df = _normalize_ohlc(pd.read_csv(tmp_path))
-                _df_cache[key] = (etag, df)
+                _df_cache[cache_key] = (etag, df)
                 return df
             except Exception:
                 pass
 
         _s3().download_file(bucket, obj_key, str(tmp_path))
         df = _normalize_ohlc(pd.read_csv(tmp_path))
-        _df_cache[key] = (etag, df)
+        _df_cache[cache_key] = (etag, df)
         return df
 
 
-def load_finhub_dataframe(tf: str) -> pd.DataFrame:
+def load_finhub_dataframe(tf: str, pair: str | None = None) -> pd.DataFrame:
     """
     Load FinHub OHLC (full history).
     Prefer load_finhub_tail() for chart first paint.
     """
-    key = tf.upper()
-    if key not in TIMEFRAME_FILES:
-        raise ValueError(f"Unsupported timeframe: {tf}. Use one of {TIMEFRAMES}")
+    symbol, key, _, _ = _norm(pair, tf)
     if finhub_uses_r2():
-        return _fetch_r2_dataframe(key)
-    return _load_local_csv(key)
+        return _fetch_r2_dataframe(key, symbol)
+    return _load_local_csv(key, symbol)
 
 
-def load_finhub_tail(tf: str, limit: int) -> tuple[pd.DataFrame, int, bool]:
+def load_finhub_tail(
+    tf: str, limit: int, pair: str | None = None
+) -> tuple[pd.DataFrame, int, bool]:
     """Trailing window for chart first paint — avoids full CSV download on R2."""
-    key = tf.upper()
-    if key not in TIMEFRAME_FILES:
-        raise ValueError(f"Unsupported timeframe: {tf}. Use one of {TIMEFRAMES}")
+    symbol, key, _, _ = _norm(pair, tf)
     need = max(1, int(limit))
     if finhub_uses_r2():
-        return _fetch_r2_tail(key, need)
-    df = _load_local_csv(key)
+        return _fetch_r2_tail(key, need, symbol)
+    df = _load_local_csv(key, symbol)
     out = df.iloc[-need:] if len(df) > need else df
     return out.reset_index(drop=True), int(len(df)), bool(len(df) > need)
 
 
 def load_finhub_before(
-    tf: str, before: str, limit: int
+    tf: str, before: str, limit: int, pair: str | None = None
 ) -> tuple[pd.DataFrame, int, bool]:
     """
     Older bars strictly before `before` (ISO/parseable), without full CSV when possible.
     Walks backwards from the file end via R2 byte ranges.
     """
-    key = tf.upper()
-    if key not in TIMEFRAME_FILES:
-        raise ValueError(f"Unsupported timeframe: {tf}. Use one of {TIMEFRAMES}")
+    symbol, key, cache_key, files = _norm(pair, tf)
     need = max(1, int(limit))
     before_ts = pd.to_datetime(before, utc=True)
 
     if not finhub_uses_r2():
-        df = _load_local_csv(key)
+        df = _load_local_csv(key, symbol)
         older = df[df["datetime"] < before_ts]
         out = older.iloc[-need:] if len(older) > need else older
         return out.reset_index(drop=True), int(len(df)), bool(len(older) > need)
@@ -378,16 +385,16 @@ def load_finhub_before(
     if not r2_configured():
         raise RuntimeError("R2 credentials incomplete")
 
-    filename = TIMEFRAME_FILES[key]
+    filename = files[key]
     bucket = os.environ["R2_BUCKET"].strip()
-    obj_key = _object_key(filename)
+    obj_key = _object_key(filename, symbol)
 
-    with _lock_for(f"before:{filename}"):
+    with _lock_for(f"before:{cache_key}"):
         head = _r2_head(bucket, obj_key)
         etag = str(head.get("ETag") or "").strip('"')
         size = int(head.get("ContentLength") or 0)
 
-        full = _df_cache.get(key)
+        full = _df_cache.get(cache_key)
         if full and full[0] == etag:
             df = full[1]
             older = df[df["datetime"] < before_ts]
@@ -417,16 +424,15 @@ def load_finhub_before(
         return out.reset_index(drop=True), est, has_more
 
 
-def finhub_bounds(tf: str) -> dict:
+def finhub_bounds(tf: str, pair: str | None = None) -> dict:
     """History bounds without loading the full frame when on R2."""
-    key = tf.upper()
-    if key not in TIMEFRAME_FILES:
-        raise ValueError(f"Unsupported timeframe: {tf}. Use one of {TIMEFRAMES}")
+    symbol, key, _, _ = _norm(pair, tf)
 
     if finhub_uses_r2():
-        meta = r2_timeframe_bounds(key)
+        meta = r2_timeframe_bounds(key, symbol)
         return {
             "tf": key,
+            "pair": symbol,
             "count": int(meta.get("count") or 0),
             "start": meta.get("start"),
             "end": meta.get("end"),
@@ -434,10 +440,11 @@ def finhub_bounds(tf: str) -> dict:
             "end_unix": meta.get("end_unix"),
         }
 
-    df = _load_local_csv(key)
+    df = _load_local_csv(key, symbol)
     if df.empty:
         return {
             "tf": key,
+            "pair": symbol,
             "count": 0,
             "start": None,
             "end": None,
@@ -448,6 +455,7 @@ def finhub_bounds(tf: str) -> dict:
     end_ts = df["datetime"].iloc[-1]
     return {
         "tf": key,
+        "pair": symbol,
         "count": int(len(df)),
         "start": start_ts.isoformat(),
         "end": end_ts.isoformat(),
@@ -456,12 +464,14 @@ def finhub_bounds(tf: str) -> dict:
     }
 
 
-def r2_timeframe_status() -> list[dict]:
+def r2_timeframe_status(pair: str | None = None) -> list[dict]:
     """Status from R2 object heads only — no local files."""
     load_dotenv()
+    symbol = normalize_pair(pair)
+    files = timeframe_files(symbol)
     items: list[dict] = []
     if not r2_configured():
-        for tf, filename in TIMEFRAME_FILES.items():
+        for tf, filename in files.items():
             items.append(
                 {
                     "tf": tf,
@@ -473,6 +483,7 @@ def r2_timeframe_status() -> list[dict]:
                     "end": None,
                     "size_bytes": 0,
                     "source": "r2",
+                    "pair": symbol,
                 }
             )
         return items
@@ -482,10 +493,11 @@ def r2_timeframe_status() -> list[dict]:
 
     def _check_tf(item: tuple[str, str]) -> dict:
         tf, filename = item
-        obj_key = _object_key(filename)
+        obj_key = _object_key(filename, symbol)
+        cache_key = f"{symbol}:{tf}"
         exists = False
         size_bytes = 0
-        in_memory = tf in _df_cache or tf in _tail_cache
+        in_memory = cache_key in _df_cache or cache_key in _tail_cache
         try:
             head = s3.head_object(Bucket=bucket, Key=obj_key)
             exists = True
@@ -503,9 +515,10 @@ def r2_timeframe_status() -> list[dict]:
             "end": None,
             "size_bytes": size_bytes,
             "source": "r2",
+            "pair": symbol,
         }
 
     with concurrent.futures.ThreadPoolExecutor(max_workers=8) as executor:
-        items = list(executor.map(_check_tf, TIMEFRAME_FILES.items()))
+        items = list(executor.map(_check_tf, files.items()))
 
     return items
