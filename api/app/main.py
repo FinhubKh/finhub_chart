@@ -13,6 +13,7 @@ from .config import TIMEFRAMES
 from .data_loader import candles_payload, candles_range, load_ohlc, timeframe_status
 from .db import close_pool, init_pool
 from .strategies import create_strategy, list_strategies
+from .user_routes import router as user_router
 
 
 @asynccontextmanager
@@ -38,6 +39,8 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+app.include_router(user_router)
 
 
 class BacktestRequest(BaseModel):
