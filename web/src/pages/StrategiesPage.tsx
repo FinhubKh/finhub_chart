@@ -126,7 +126,7 @@ export default function StrategiesPage() {
     setError(null);
     try {
       const row = await createStrategy({
-        userId: user.id,
+        userId: user.uid,
         name: name.trim(),
         tf,
         engine: engine || null,

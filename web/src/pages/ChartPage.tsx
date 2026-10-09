@@ -208,7 +208,7 @@ export default function ChartPage() {
 
     setDrawSaveState("saving");
     const timer = window.setTimeout(() => {
-      void saveDrawings(strategyId, user.id, drawings)
+      void saveDrawings(strategyId, user.uid, drawings)
         .then(() => setDrawSaveState("saved"))
         .catch(() => setDrawSaveState("error"));
     }, DRAW_SAVE_DEBOUNCE_MS);
@@ -413,7 +413,7 @@ export default function ChartPage() {
         void addStrategyPineOverlay({
           strategyId,
           scriptId: script.id,
-          userId: user.id,
+          userId: user.uid,
         }).catch(() => {});
       }
     }
@@ -587,17 +587,17 @@ export default function ChartPage() {
     setError(null);
     try {
       const row = await createStrategy({
-        userId: user.id,
+        userId: user.uid,
         name: saveAsName.trim(),
         pair,
         tf,
       });
-      await saveDrawings(row.id, user.id, drawings);
+      await saveDrawings(row.id, user.uid, drawings);
       for (const script of pineOnChart) {
         await addStrategyPineOverlay({
           strategyId: row.id,
           scriptId: script.id,
-          userId: user.id,
+          userId: user.uid,
         });
       }
       setSaveAsOpen(false);
@@ -845,7 +845,7 @@ export default function ChartPage() {
             <PinePanel
               open={pineOpen}
               onClose={() => setPineOpen(false)}
-              userId={user.id}
+              userId={user.uid}
               candlesLen={visibleCandles.length}
               onChartIds={pineOnChart.map((s) => s.id)}
               onToggleChart={togglePine}

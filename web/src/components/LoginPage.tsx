@@ -37,7 +37,7 @@ export default function LoginPage() {
       } else {
         await signUp(email.trim(), password);
         setInfo(
-          "Account created. If email confirmation is enabled in Supabase, check your inbox; otherwise you can sign in now."
+          "Account created. If email verification is enabled in Firebase, check your inbox; otherwise you can sign in now."
         );
         setMode("signin");
       }
@@ -59,8 +59,9 @@ export default function LoginPage() {
 
         {!configured && (
           <div className="login-error">
-            Supabase keys are missing. Add <code>VITE_SUPABASE_URL</code> and{" "}
-            <code>VITE_SUPABASE_ANON_KEY</code> to <code>web/.env.local</code>.
+            Firebase keys are missing. Add <code>VITE_FIREBASE_API_KEY</code>,{" "}
+            <code>VITE_FIREBASE_AUTH_DOMAIN</code>, <code>VITE_FIREBASE_PROJECT_ID</code>, and{" "}
+            <code>VITE_FIREBASE_APP_ID</code> to <code>web/.env.local</code>.
           </div>
         )}
 
