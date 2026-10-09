@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { Navigate, useLocation, useNavigate } from "react-router-dom";
+import { Link, Navigate, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "../lib/auth";
 import "../styles/components/login-page.css";
 
@@ -117,6 +117,11 @@ export default function LoginPage() {
               </button>
             </p>
           )}
+          <p>
+            <Link to="/" className="register-link">
+              ← Back to home
+            </Link>
+          </p>
         </div>
       </div>
     </div>

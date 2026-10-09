@@ -1,0 +1,291 @@
+.landing {
+  --landing-ink: var(--text);
+  --landing-mute: var(--muted);
+  --landing-line: color-mix(in srgb, var(--accent) 55%, #7dd3e0);
+  min-height: 100%;
+  min-height: 100dvh;
+  overflow: auto;
+  background:
+    radial-gradient(1200px 600px at 85% -10%, color-mix(in srgb, var(--accent) 22%, transparent), transparent 60%),
+    radial-gradient(900px 500px at -10% 80%, color-mix(in srgb, var(--green) 10%, transparent), transparent 55%),
+    linear-gradient(180deg, #0e1219 0%, var(--bg) 45%, #10151e 100%);
+  color: var(--landing-ink);
+}
+
+.landing-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 1.1rem clamp(1.25rem, 4vw, 3rem);
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  backdrop-filter: blur(12px);
+  background: color-mix(in srgb, #0e1219 72%, transparent);
+  border-bottom: 1px solid color-mix(in srgb, var(--border) 70%, transparent);
+}
+
+.landing-brand {
+  font-size: 1.15rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  color: #fff;
+  text-decoration: none;
+}
+
+.landing-nav {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.landing-nav-link {
+  color: var(--landing-mute);
+  text-decoration: none;
+  font-size: 0.92rem;
+  padding: 0.4rem 0.55rem;
+}
+
+.landing-nav-link:hover {
+  color: #fff;
+}
+
+.landing-nav-cta {
+  text-decoration: none;
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: #fff;
+  background: var(--accent);
+  border: 1px solid var(--play-border);
+  border-radius: 8px;
+  padding: 0.45rem 0.9rem;
+}
+
+.landing-nav-cta:hover {
+  filter: brightness(1.08);
+}
+
+.landing-hero {
+  display: grid;
+  grid-template-columns: 1.05fr 1fr;
+  gap: clamp(1.5rem, 4vw, 3.5rem);
+  align-items: center;
+  padding: clamp(2rem, 6vw, 4.5rem) clamp(1.25rem, 4vw, 3rem) 2rem;
+  max-width: 1180px;
+  margin: 0 auto;
+}
+
+.landing-eyebrow {
+  margin: 0 0 0.65rem;
+  color: var(--accent);
+  font-size: 0.8rem;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.landing-title {
+  margin: 0;
+  font-size: clamp(3rem, 9vw, 5.5rem);
+  line-height: 0.95;
+  letter-spacing: -0.03em;
+  color: #fff;
+  font-weight: 750;
+}
+
+.landing-lede {
+  margin: 1.15rem 0 0;
+  max-width: 34rem;
+  color: color-mix(in srgb, var(--landing-ink) 82%, var(--landing-mute));
+  font-size: clamp(1.02rem, 2.2vw, 1.2rem);
+  line-height: 1.55;
+}
+
+.landing-cta-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  margin-top: 1.75rem;
+}
+
+.landing-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  text-decoration: none;
+  border-radius: 10px;
+  padding: 0.75rem 1.2rem;
+  font-weight: 650;
+  font-size: 0.98rem;
+  border: 1px solid transparent;
+  transition: filter 0.15s ease, background 0.15s ease, border-color 0.15s ease;
+}
+
+.landing-btn.primary {
+  background: var(--accent);
+  border-color: var(--play-border);
+  color: #fff;
+}
+
+.landing-btn.primary:hover {
+  filter: brightness(1.08);
+}
+
+.landing-btn.ghost {
+  background: transparent;
+  border-color: var(--border-strong);
+  color: var(--landing-ink);
+}
+
+.landing-btn.ghost:hover {
+  border-color: var(--accent);
+  color: #fff;
+}
+
+.landing-hero-visual {
+  min-width: 0;
+}
+
+.landing-chart-frame {
+  position: relative;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--bg-elevated) 88%, #000), #0f141c);
+  box-shadow: var(--shadow);
+  overflow: hidden;
+  aspect-ratio: 16 / 11;
+}
+
+.landing-chart-grid {
+  position: absolute;
+  inset: 0;
+  background-image:
+    linear-gradient(to right, color-mix(in srgb, var(--border) 55%, transparent) 1px, transparent 1px),
+    linear-gradient(to bottom, color-mix(in srgb, var(--border) 55%, transparent) 1px, transparent 1px);
+  background-size: 12.5% 20%;
+  opacity: 0.45;
+  mask-image: linear-gradient(180deg, #000 30%, transparent 95%);
+}
+
+.landing-candles {
+  position: absolute;
+  inset: 8% 4% 14% 4%;
+  width: 92%;
+  height: 78%;
+}
+
+.landing-line {
+  fill: none;
+  stroke: var(--landing-line);
+  stroke-width: 2.2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  opacity: 0.85;
+}
+
+.landing-candles .up line,
+.landing-candles .up rect {
+  stroke: var(--green);
+  fill: var(--green);
+}
+
+.landing-candles .down line,
+.landing-candles .down rect {
+  stroke: var(--red);
+  fill: var(--red);
+}
+
+.landing-candles line {
+  stroke-width: 1.5;
+}
+
+.landing-chart-tag {
+  position: absolute;
+  left: 1rem;
+  bottom: 0.85rem;
+  font-size: 0.75rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--landing-mute);
+}
+
+.landing-strip {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 1rem;
+  max-width: 1180px;
+  margin: 0.5rem auto 2.5rem;
+  padding: 0 clamp(1.25rem, 4vw, 3rem);
+}
+
+.landing-strip p {
+  margin: 0;
+  padding: 1rem 0 0;
+  border-top: 1px solid var(--border);
+  display: grid;
+  gap: 0.35rem;
+}
+
+.landing-strip strong {
+  color: #fff;
+  font-size: 0.98rem;
+}
+
+.landing-strip span {
+  color: var(--landing-mute);
+  font-size: 0.9rem;
+  line-height: 1.45;
+}
+
+.landing-foot {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  flex-wrap: wrap;
+  max-width: 1180px;
+  margin: 0 auto;
+  padding: 1.25rem clamp(1.25rem, 4vw, 3rem) 2rem;
+  color: var(--landing-mute);
+  font-size: 0.85rem;
+  border-top: 1px solid color-mix(in srgb, var(--border) 80%, transparent);
+}
+
+.landing-foot a {
+  color: var(--landing-mute);
+  text-decoration: none;
+}
+
+.landing-foot a:hover {
+  color: #fff;
+}
+
+@media (max-width: 860px) {
+  .landing-hero {
+    grid-template-columns: 1fr;
+    padding-top: 1.75rem;
+  }
+
+  .landing-hero-visual {
+    order: -1;
+  }
+
+  .landing-strip {
+    grid-template-columns: 1fr;
+  }
+
+  .landing-title {
+    font-size: clamp(2.6rem, 14vw, 3.6rem);
+  }
+}
+
+/* Landing needs page scroll; chart app keeps overflow hidden on html/body. */
+html:has(.landing),
+body:has(.landing),
+#root:has(.landing) {
+  overflow: auto;
+  height: auto;
+  min-height: 100%;
+  min-height: 100dvh;
+}
