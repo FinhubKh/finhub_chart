@@ -43,6 +43,15 @@ def _require_owned_strategy(conn: Any, strategy_id: UUID, user: AuthedUser) -> N
         raise _not_found("Strategy not found")
 
 
+def _require_owned_pine_script(conn: Any, script_id: UUID, user: AuthedUser) -> None:
+    cur = conn.execute(
+        "select id from public.pine_scripts where id = %s and user_id = %s",
+        (str(script_id), user.uid),
+    )
+    if cur.fetchone() is None:
+        raise _not_found("Pine script not found")
+
+
 # ---------------------------------------------------------------------------
 # Strategies
 # ---------------------------------------------------------------------------
@@ -80,6 +89,9 @@ def list_user_strategies(user: AuthedUser = Depends(require_user)):
 
 @router.post("/strategies")
 def create_user_strategy(body: StrategyCreate, user: AuthedUser = Depends(require_user)):
+    name = body.name.strip()
+    if not name:
+        raise HTTPException(status_code=400, detail="Strategy name must not be empty")
     with connect() as conn:
         ensure_profile(conn, user)
         cur = conn.execute(
@@ -90,7 +102,7 @@ def create_user_strategy(body: StrategyCreate, user: AuthedUser = Depends(requir
             """,
             (
                 user.uid,
-                body.name.strip(),
+                name,
                 body.pair,
                 body.tf,
                 body.notes,
@@ -316,6 +328,7 @@ def list_strategy_overlays(strategy_id: UUID, user: AuthedUser = Depends(require
 def _upsert_overlay(strategy_id: UUID, body: OverlayCreate, user: AuthedUser) -> dict[str, Any]:
     with connect() as conn:
         _require_owned_strategy(conn, strategy_id, user)
+        _require_owned_pine_script(conn, body.script_id, user)
         conn.execute(
             """
             insert into public.strategy_pine_overlays (strategy_id, script_id, user_id)

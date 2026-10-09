@@ -35,6 +35,25 @@ STRATEGIES = [
     },
 ]
 
+PINE_SCRIPTS = [
+    {
+        "id": "33333333-3333-3333-3333-333333333333",
+        "user_id": "uid-1",
+        "name": "My Pine Script",
+        "source": "//@version=5",
+        "created_at": "2024-01-01T00:00:00+00:00",
+        "updated_at": "2024-01-01T00:00:00+00:00",
+    },
+    {
+        "id": "44444444-4444-4444-4444-444444444444",
+        "user_id": "uid-2",
+        "name": "Someone Else's Script",
+        "source": "//@version=5",
+        "created_at": "2024-01-02T00:00:00+00:00",
+        "updated_at": "2024-01-02T00:00:00+00:00",
+    },
+]
+
 
 class FakeCursor:
     def __init__(self, rows):
@@ -50,21 +69,48 @@ class FakeCursor:
 class FakeConn:
     """Minimal stand-in for a psycopg Connection, matching `conn.execute(sql, params)` usage."""
 
-    def __init__(self, strategies):
-        self.strategies = strategies
+    def __init__(self, strategies=None, pine_scripts=None):
+        self.strategies = strategies if strategies is not None else []
+        self.pine_scripts = pine_scripts if pine_scripts is not None else []
         self.calls: list[tuple[str, object]] = []
 
     def execute(self, sql, params=None):
         self.calls.append((sql, params))
         normalized = " ".join(sql.split()).lower()
+        params = params or ()
 
         if normalized.startswith("insert into public.profiles"):
             return FakeCursor([])
 
-        if normalized.startswith("select") and "from public.strategies" in normalized:
+        if normalized.startswith("select * from public.strategies where user_id = %s"):
             uid = params[0]
             rows = [row for row in self.strategies if row["user_id"] == uid]
             return FakeCursor(rows)
+
+        if normalized.startswith(
+            "select id from public.strategies where id = %s and user_id = %s"
+        ):
+            strategy_id, uid = params
+            rows = [
+                row
+                for row in self.strategies
+                if row["id"] == strategy_id and row["user_id"] == uid
+            ]
+            return FakeCursor(rows)
+
+        if normalized.startswith(
+            "select id from public.pine_scripts where id = %s and user_id = %s"
+        ):
+            script_id, uid = params
+            rows = [
+                row
+                for row in self.pine_scripts
+                if row["id"] == script_id and row["user_id"] == uid
+            ]
+            return FakeCursor(rows)
+
+        if normalized.startswith("insert into public.strategy_pine_overlays"):
+            return FakeCursor([])
 
         raise AssertionError(f"Unexpected query in FakeConn.execute: {sql!r}")
 
@@ -95,3 +141,32 @@ def test_list_strategies_scoped_to_user(monkeypatch):
 
     # ensure_profile ran before the scoped select, using the authenticated uid.
     assert fake_conn.calls[0][1] == ("uid-1", "a@b.com")
+
+
+def test_create_strategy_rejects_blank_name(monkeypatch):
+    fake_conn = FakeConn(list(STRATEGIES))
+    client = _build_client(fake_conn, monkeypatch, uid="uid-1")
+
+    resp = client.post("/api/user/strategies", json={"name": "   "})
+
+    assert resp.status_code == 400
+    # No database access should happen before validation fails.
+    assert fake_conn.calls == []
+
+
+def test_add_pine_overlay_rejects_script_not_owned_by_user(monkeypatch):
+    fake_conn = FakeConn(list(STRATEGIES), list(PINE_SCRIPTS))
+    client = _build_client(fake_conn, monkeypatch, uid="uid-1")
+
+    # Strategy 111... is owned by uid-1, but script 444... is owned by uid-2.
+    resp = client.post(
+        "/api/user/strategies/11111111-1111-1111-1111-111111111111/pine-overlays",
+        json={"script_id": "44444444-4444-4444-4444-444444444444"},
+    )
+
+    assert resp.status_code == 404
+    # The overlay insert must never be attempted.
+    assert not any(
+        "insert into public.strategy_pine_overlays" in " ".join(sql.split()).lower()
+        for sql, _ in fake_conn.calls
+    )
